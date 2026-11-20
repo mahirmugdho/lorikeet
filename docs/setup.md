@@ -47,7 +47,7 @@ Ryan has Write access; Mahir owns the repo. Owner-only settings are marked **Mah
 | Squash-only merges, auto-merge, delete branch on merge | **Mahir**: block below |
 | Dependabot alerts + security fixes, secret scanning + push protection | **Mahir**: block below |
 | Private vulnerability reporting (used by `SECURITY.md` and the issue chooser) | **Mahir**: block below |
-| `main` ruleset: PR required, 1 approval + code owner, `Check` must pass, no force-push or delete | **Mahir**: block below, **after** `Check` has run once |
+| `main` ruleset: PR required, 1 approval + code owner, last push approved by someone else, `Check` must pass, no force-push or delete | **Mahir**: block below, **after** `Check` has run once |
 | `CLAUDE_CODE_OAUTH_TOKEN` secret for `@claude` | **Mahir** (secrets need Admin): see Secrets |
 
 Mahir, run this from the repo root once the scaffold PR's `Check` has reported:

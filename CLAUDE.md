@@ -92,3 +92,4 @@ docs/                product/, adr/, security/, legal/, ROADMAP, setup, workflow
 - **Tests needing pygame** set `SDL_VIDEODRIVER=dummy`; nothing in CI may open a real window or camera.
 - `docs/product/idea.md` is Mahir's original README, **verbatim**. Never edit it. Ruff 0.17+ formats code blocks inside Markdown too, so `idea.md` is excluded in `pyproject.toml`; keep it that way.
 - Games must be original: no names, art, levels, or music from existing games.
+- **Adding a teammate** means updating `.github/CODEOWNERS` *and* `include_comments_by_actor` in `.github/workflows/claude.yml`. Otherwise `@claude` ignores their comments.
