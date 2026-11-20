@@ -1,0 +1,30 @@
+name: PR title
+
+# Squash merges use the PR title as the commit on main, so it must be a
+# Conventional Commit: type(scope): summary  (scope optional, ! for breaking).
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  title:
+    name: Conventional PR title
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Check title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(feat|fix|chore|docs|refactor|test|perf|ci|build|revert)(\([a-z0-9-]+\))?!?: .+'
+          if [[ "$TITLE" =~ $pattern ]]; then
+            echo "OK: $TITLE"
+          else
+            echo "::error::PR title must look like 'feat(detection): add …'. Got: $TITLE"
+            echo "Types: feat fix chore docs refactor test perf ci build revert. Scopes: geometry calibration detection tracking interface puzzle tower-defense ci docs deps."
+            exit 1
+          fi
