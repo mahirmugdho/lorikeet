@@ -90,5 +90,5 @@ docs/                product/, adr/, security/, legal/, ROADMAP, setup, workflow
 - **Webcam auto-exposure and white balance drift** as the projected image changes. Lock them where the camera allows (`CAP_PROP_AUTO_EXPOSURE`); otherwise expect thresholds to wander.
 - **Hands cover notes.** A missing note isn't a removed note until it's been gone for `LORIKEET_STABLE_FRAMES` (Phase 2).
 - **Tests needing pygame** set `SDL_VIDEODRIVER=dummy`; nothing in CI may open a real window or camera.
-- `docs/product/idea.md` is Mahir's original README, **verbatim**. Never edit it.
+- `docs/product/idea.md` is Mahir's original README, **verbatim**. Never edit it. Ruff 0.17+ formats code blocks inside Markdown too, so `idea.md` is excluded in `pyproject.toml`; keep it that way.
 - Games must be original: no names, art, levels, or music from existing games.
