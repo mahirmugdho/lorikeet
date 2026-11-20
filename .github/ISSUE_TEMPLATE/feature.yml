@@ -1,0 +1,29 @@
+name: Feature
+description: A new thing Lorikeet should do
+labels: ["feature"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / opportunity
+      description: Who is this for and what's in their way today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should happen? Rough is fine.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when…
+      description: Acceptance criteria a reviewer can check.
+      placeholder: "- [ ] …"
+  - type: dropdown
+    id: size
+    attributes:
+      label: Rough size
+      options: ["S (< half a day)", "M (1–2 days)", "L (needs splitting)"]
