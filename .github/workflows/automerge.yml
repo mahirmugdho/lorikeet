@@ -1,0 +1,77 @@
+name: Auto-merge
+
+# Every non-draft PR from this repo turns on GitHub auto-merge (squash).
+# GitHub then merges it the moment the required checks on `main` pass.
+# Opt out with the `no-automerge` label. Dependabot: patch/minor only.
+#
+# Human authors only: PRs opened by bots (e.g. the @claude agent in claude.yml)
+# never auto-merge. Otherwise, on a 0-approval solo ruleset, agent-written code
+# would reach main with no human ever reading it.
+#
+# Team repos (ruleset requires 1 approval): auto-merge stays armed and fires once
+# a teammate approves, Dependabot PRs included.
+#
+# Token: merges done with the built-in GITHUB_TOKEN do NOT trigger other
+# workflows (CI/deploy on push to main). Add a fine-grained PAT as the repo
+# secret AUTOMERGE_TOKEN (this repo only; Contents + Pull requests: read/write)
+# so auto-merged commits trigger push-to-main workflows (deploys). Without it we fall back to GITHUB_TOKEN.
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize, labeled, unlabeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  enable:
+    name: Enable auto-merge
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.type != 'Bot' &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) &&
+      !contains(github.event.pull_request.labels.*.name, 'no-automerge')
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN || secrets.GITHUB_TOKEN }}
+
+  disable:
+    name: Disable auto-merge (no-automerge label)
+    if: >-
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'no-automerge'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: gh pr merge --disable-auto "$PR_URL" || true
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN || secrets.GITHUB_TOKEN }}
+
+  dependabot:
+    name: Auto-merge Dependabot (patch/minor)
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.actor == 'dependabot[bot]' &&
+      !contains(github.event.pull_request.labels.*.name, 'no-automerge')
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@v3
+      # Allowlist, not denylist: an empty or unknown update type never auto-merges.
+      - if: contains(fromJSON('["version-update:semver-patch","version-update:semver-minor"]'), steps.meta.outputs.update-type)
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

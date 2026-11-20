@@ -1,0 +1,32 @@
+[project]
+name = "lorikeet"
+version = "0.1.0"
+description = "Turns a projector, a webcam, and sticky notes into physical play surfaces for games."
+readme = "README.md"
+authors = [{ name = "RyanS2025" }, { name = "mahirmugdho" }]
+requires-python = ">=3.13"
+dependencies = ["numpy>=2.3"]
+
+[build-system]
+requires = ["uv_build>=0.13.9,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = ["pytest>=8.4", "ruff>=0.14", "pyright>=1.1.405"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "NPY", "RUF"]
+
+[tool.pyright]
+typeCheckingMode = "basic"
+include = ["src", "tests"]
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
