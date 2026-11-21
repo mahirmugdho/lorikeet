@@ -29,6 +29,7 @@
 - Claude reads `CLAUDE.md` every session. Keep it accurate; update it in the same PR as the change that makes it stale.
 - Ask for a plan before multi-file work, and read it before saying go.
 - Claude must show evidence: pasted test output, a screenshot, or a photo of the projector. Treat "should work" as "not verified".
+- **No AI co-authors.** Commits and PRs carry only the human author: no `Co-Authored-By: Claude` trailers or "Generated with Claude Code" lines. Claude Code's byline is off in `.claude/settings.json`.
 - Fill the PR template's **AI assistance** section honestly: what Claude wrote, and what you're unsure about.
 - `@claude` in an issue or PR comment runs Claude in GitHub Actions (once `CLAUDE_CODE_OAUTH_TOKEN` is set). PRs it opens never auto-merge, so a human reviews them.
 - Never paste camera frames with people in them into a Claude session, an issue, or a PR (ADR 0007).

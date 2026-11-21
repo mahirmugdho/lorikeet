@@ -56,6 +56,7 @@ docs/                product/, adr/, security/, legal/, ROADMAP, setup, workflow
 - **Tests first for logic**: geometry, detection on fixture images, tracking, game rules.
 - **Small PRs, one concern each**, reviewable in about 15 minutes. Squash-merged.
 - **Conventional Commits.** Scopes: `geometry calibration detection tracking interface puzzle tower-defense ci docs deps`. Example: `feat(detection): find yellow notes as quads`.
+- **No AI co-authors.** Commits and PRs are authored by the human only. Never add a `Co-Authored-By: Claude` trailer or a "Generated with Claude Code" line to a commit message or PR body. `.claude/settings.json` turns Claude Code's byline off (`attribution`); don't add it by hand.
 - A choice that's expensive to reverse gets an ADR: `/new-adr`.
 - Ready for review: `/ship` (it runs `make check`, self-reviews, and opens the PR).
 - **Verify, don't assume.** Run the test, look at the projector, paste the output. "Should work" isn't evidence.
