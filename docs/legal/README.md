@@ -10,4 +10,4 @@
 
 - **Games are original.** No names, characters, art, levels, music, or sounds from existing games, even "renamed". Genre mechanics (tower defense, physics puzzles) are fine.
 - **Third-party assets** (sprites, fonts, sounds) need a license that allows our use. Record the source and license in the PR that adds them, and keep a credits list once there's more than one.
-- **License for our own code:** not chosen yet (ADR 0003).
+- **License for our own code:** MIT (`LICENSE`, ADR 0003).

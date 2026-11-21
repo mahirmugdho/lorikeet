@@ -1,6 +1,6 @@
 # 0002. Build Lorikeet as one local Python process (OpenCV + pygame-ce + pymunk)
 
-- **Status:** Proposed. **Waiting on Mahir's call** in the scaffold PR.
+- **Status:** Accepted, 2026-11-21. Mahir chose option 1.
 - **Date:** 2026-11-20
 - **Deciders:** Ryan, Mahir
 

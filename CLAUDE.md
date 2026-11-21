@@ -7,7 +7,7 @@ Lorikeet turns a projector, a webcam, and sticky notes into physical play surfac
 - [docs/product/pitch.md](docs/product/pitch.md): problem, core loop, v1 scope, open questions
 - [docs/ROADMAP.md](docs/ROADMAP.md): phases, owners, what's actually done
 - [docs/adr/](docs/adr/README.md): decisions. Read the ones covering what you're about to change.
-- **ADR 0002 (stack) and ADR 0003 (license) are Proposed and waiting on Mahir.** Check their status before building past Phase 0 on top of them.
+- **Stack and license are settled:** ADR 0002 (Python + OpenCV + pygame-ce + pymunk) and ADR 0003 (MIT) are Accepted.
 
 ## Commands
 

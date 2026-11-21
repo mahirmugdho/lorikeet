@@ -1,6 +1,6 @@
 # 0003. Choose a license
 
-- **Status:** Proposed. **Waiting on Mahir's call** in the scaffold PR.
+- **Status:** Accepted, 2026-11-21. Mahir chose MIT.
 - **Date:** 2026-11-20
 - **Deciders:** Ryan, Mahir
 
@@ -16,7 +16,7 @@ The repository is public on Mahir's account and has no LICENSE file. With no lic
 
 ## Decision
 
-Proposed: **MIT**, if Lorikeet is a portfolio or side project. Mahir decides. Once he does, the PR that accepts this ADR also adds the matching `LICENSE` file (or none, for option 2) and updates the README's License section.
+We will license Lorikeet under **MIT**. The scaffold PR, which accepts this ADR, adds the `LICENSE` file and updates the README's License section.
 
 ## Consequences
 

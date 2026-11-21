@@ -12,8 +12,8 @@ An ADR is a short note recording one decision: the context, the options, what we
 | #                                               | Decision                                                            | Status                       |
 | ----------------------------------------------- | ------------------------------------------------------------------- | ---------------------------- |
 | [0001](0001-record-architecture-decisions.md)   | Record architecture decisions                                       | Accepted                     |
-| [0002](0002-python-desktop-stack.md)            | One local Python process: OpenCV + pygame-ce + pymunk               | Proposed (Mahir to decide)   |
-| [0003](0003-license.md)                         | Choose a license (MIT proposed)                                     | Proposed (Mahir to decide)   |
+| [0002](0002-python-desktop-stack.md)            | One local Python process: OpenCV + pygame-ce + pymunk               | Accepted                     |
+| [0003](0003-license.md)                         | Choose a license: MIT                                               | Accepted                     |
 | [0004](0004-games-see-only-the-interface.md)    | Games see only the interface: a Scene of notes, in two modes        | Proposed                     |
 | [0005](0005-projector-space-coordinates.md)     | Projector pixels are the only game coordinates; ArUco calibration   | Proposed                     |
 | [0006](0006-classical-color-detection.md)       | Detect notes with HSV colour segmentation, not ML                   | Proposed                     |

@@ -2,7 +2,7 @@
 
 A box is ticked only when the work is merged **and** demonstrated (test run, screenshot, recording, or photo).
 
-Owners are proposed (see `docs/workflow.md` lanes). Swap freely; just update this file.
+Owners follow the lanes in `docs/workflow.md`. Swap freely; just update this file.
 
 ## Phase 0: Scaffold
 
@@ -13,13 +13,13 @@ Owners are proposed (see `docs/workflow.md` lanes). Swap freely; just update thi
 - [ ] CI `Check` green on GitHub
 - [ ] Docs: pitch, roadmap, ADRs 0001–0007, setup, workflow, testing, security, legal, BUY
 - [ ] Claude setup: `CLAUDE.md`, `.claude/settings.json`, `/ship`, `/new-adr`
-- [ ] Mahir decides stack (ADR 0002) and license (ADR 0003)
+- [x] Mahir decides stack (ADR 0002) and license (ADR 0003)
 
 **Done when:** the scaffold PR is merged with CI green, and ADRs 0002/0003 are Accepted or superseded.
 
 ## Phase 1: See the notes
 
-**Goal:** real Post-its on a real surface get outlined by the projector, exactly on top of them. **Owner:** Ryan
+**Goal:** real Post-its on a real surface get outlined by the projector, exactly on top of them. **Owner:** Mahir
 
 - [ ] `capture.py`: open the webcam by index, read frames, report FPS
 - [ ] Fullscreen pygame-ce window on the projector display (`LORIKEET_DISPLAY_INDEX`)
@@ -33,7 +33,7 @@ Owners are proposed (see `docs/workflow.md` lanes). Swap freely; just update thi
 
 ## Phase 2: Track notes, define the interface
 
-**Goal:** games get a stable, testable stream of notes in both modes, with no camera required. **Owners:** Ryan + Mahir (the contract is shared)
+**Goal:** games get a stable, testable stream of notes in both modes, with no camera required. **Owner:** Mahir (vision and the interface)
 
 - [ ] `tracking.py`: stable ids across frames, debounce for hands (`LORIKEET_STABLE_FRAMES`)
 - [ ] `interface.py`: `Note`, `Scene`, `SceneSource`, `FakeSceneSource`
@@ -46,7 +46,7 @@ Owners are proposed (see `docs/workflow.md` lanes). Swap freely; just update thi
 
 ## Phase 3: Puzzle game (bodies)
 
-**Goal:** a playable physics puzzle where notes are the level. **Owner:** Mahir
+**Goal:** a playable physics puzzle where notes are the level. **Owner:** Ryan
 
 - [ ] Ball spawn, goal zone, win detection
 - [ ] 5+ levels with obstacles and par times
@@ -57,7 +57,7 @@ Owners are proposed (see `docs/workflow.md` lanes). Swap freely; just update thi
 
 ## Phase 4: Tower defense (selections)
 
-**Goal:** a playable tower defense where placing a note builds a tower. **Owner:** Mahir, with Ryan once Phase 2 lands
+**Goal:** a playable tower defense where placing a note builds a tower. **Owner:** Ryan, with Mahir once Phase 2 lands
 
 - [ ] Grid, enemy path, waves
 - [ ] Note placed on a cell builds a tower; removing it sells it

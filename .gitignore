@@ -11,7 +11,7 @@ dist/
 .coverage
 htmlcov/
 
-# Lorikeet local state (Phase 1+): per-room calibration and opt-in debug frames.
+# Lorikeet local state (Phase 1+): saved calibration and opt-in debug frames.
 # Debug frames can contain people. They never leave this folder (docs/legal/privacy.md).
 .lorikeet/
 

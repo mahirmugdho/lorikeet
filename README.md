@@ -31,7 +31,7 @@ Running the projector app arrives in Phase 1. Full machine setup is in [docs/set
 
 ## Stack
 
-Proposed in [ADR 0002](docs/adr/0002-python-desktop-stack.md) and awaiting the team's sign-off. Python 3.13 with uv, plus:
+Decided in [ADR 0002](docs/adr/0002-python-desktop-stack.md). Python 3.13 with uv, plus:
 
 - NumPy for the geometry
 - OpenCV (headless) for capture, ArUco calibration, and colour detection
@@ -57,4 +57,4 @@ Ryan ([@RyanS2025](https://github.com/RyanS2025)) and Mahir ([@mahirmugdho](http
 
 ## License
 
-Not chosen yet. See [ADR 0003](docs/adr/0003-license.md). Until a LICENSE file is added, default copyright applies.
+[MIT](LICENSE). See [ADR 0003](docs/adr/0003-license.md).

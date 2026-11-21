@@ -24,7 +24,7 @@ Video games live behind glass. Even "physical" games mean a controller, a phone,
 
 ## v1 scope
 
-- Calibration with projected ArUco markers, saved per room
+- Calibration with projected ArUco markers
 - Note detection for four configurable colours, in projector coordinates
 - Tracking: stable ids, debounce for hands passing over notes
 - The interface (`Note`, `Scene`, `SceneSource`) with both modes, plus a fake source for tests
@@ -45,7 +45,7 @@ Video games live behind glass. Even "physical" games mean a controller, a phone,
 | Risk | Why it bites | Plan |
 | --- | --- | --- |
 | Projected light tints notes | The game draws on the notes it's detecting, so colours shift frame to frame | Keep the area under notes dark; threshold on saturation; debounce (ADR 0006) |
-| Webcam auto-exposure drift | Brightness changes with the projected image, so thresholds wander | Lock exposure where supported; per-room tuning view |
+| Webcam auto-exposure drift | Brightness changes with the projected image, so thresholds wander | Lock exposure where supported; colour-tuning view |
 | Latency | Camera (~33 ms) + CV + physics + projector lag adds up; over ~150 ms feels mushy | Measure end-to-end in Phase 1; profile before optimising |
 | Hands occlude notes | A note vanishes while someone reaches past it | Note removal waits `LORIKEET_STABLE_FRAMES` |
 | Demo-room lighting | Bright rooms wash out projection *and* detection | Test in a dim room first; document the ideal setup in `docs/setup.md` |
@@ -54,16 +54,20 @@ Video games live behind glass. Even "physical" games mean a controller, a phone,
 
 ## Open questions
 
-Mahir decides:
+Settled in the scaffold PR:
 
-1. **Stack.** Python + OpenCV + pygame-ce + pymunk (ADR 0002) or something else? The scaffold uses Python, but only `geometry.py` and tooling depend on it, so swapping now is cheap.
-2. **Purpose and license.** Portfolio (MIT), class project (no LICENSE), or product (proprietary)? ADR 0003.
+1. **Stack.** Python + OpenCV + pygame-ce + pymunk (ADR 0002, Accepted).
+2. **License.** MIT (ADR 0003, Accepted).
+3. **Lanes.** Mahir owns vision (camera → notes) and the interface; Ryan owns games (notes → play). `docs/workflow.md`
+
+Still open:
+
+4. **Per-room calibration saving.** Undecided, so it's out of v1 scope. Mahir decides when building calibration in Phase 1.
 
 Claude's calls, to confirm:
 
-3. **Lanes.** Ryan owns vision (camera → notes), Mahir owns games (notes → play), and both own the interface. `docs/workflow.md`
-4. **Calibration by projected ArUco markers** rather than clicking corners by hand. ADR 0005
-5. **Selections semantics.** A note that settles on a cell is `placed`; moving it is `moved`; removing it is `removed`. There's no "hover". ADR 0004
-6. **Camera feed treated as personal data**, which gives us a threat model, a privacy doc, and no people in fixtures. ADR 0007
-7. **Surface-agnostic.** Wall or table both work. The puzzle's gravity points toward the projector's bottom edge.
-8. **v1 scope and non-goals** as listed above, including no network bridge in v1.
+5. **Calibration by projected ArUco markers** rather than clicking corners by hand. ADR 0005
+6. **Selections semantics.** A note that settles on a cell is `placed`; moving it is `moved`; removing it is `removed`. There's no "hover". ADR 0004
+7. **Camera feed treated as personal data**, which gives us a threat model, a privacy doc, and no people in fixtures. ADR 0007
+8. **Surface-agnostic.** Wall or table both work. The puzzle's gravity points toward the projector's bottom edge.
+9. **v1 scope and non-goals** as listed above, including no network bridge in v1.
