@@ -36,12 +36,12 @@
 
 ## Reviewing each other's PRs
 
-- Every PR needs the *other* person's approval. You can't approve your own.
+- Every PR needs the *other* person's approval. You can't approve your own. The one exception: Mahir, as repo admin, can bypass the ruleset to merge a PR without approval. The bypass works only through a PR, so nobody pushes straight to `main`.
 - Review within a day. If you can't, say so in the PR.
 - Check the non-negotiables in `CLAUDE.md` first, then correctness, then style.
 - Pull the branch and run it on hardware when it touches capture, calibration, detection, or a game.
 - "Request changes" means blocking. Use a plain comment for nits.
-- Accepting an ADR: the reviewer comments "accept", the author flips its status to `Accepted` on the same PR, and the reviewer approves that final commit. The ruleset requires approval of the **last push** by someone other than the pusher, so a commit added after approval (by either of us, or by `@claude`) never merges unreviewed.
+- Accepting an ADR: the reviewer comments "accept", the author flips its status to `Accepted` on the same PR, and the reviewer approves that final commit. The ruleset requires approval of the **last push** by someone other than the pusher, so a commit added after approval (by either of us, or by `@claude`) never merges unreviewed, unless Mahir uses the admin bypass.
 
 ## Lanes
 
