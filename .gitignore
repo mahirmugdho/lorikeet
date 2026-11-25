@@ -36,3 +36,6 @@ CLAUDE.local.md
 # iCloud/Dropbox sync conflict copies ("file 2.md"). Never commit them; delete after merging by hand.
 * 2.*
 * 2
+
+# Sprite script output (tools/sprites/*.py write here; copy finished PNGs into the game assets)
+tools/sprites/out/
