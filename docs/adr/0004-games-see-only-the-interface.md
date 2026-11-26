@@ -1,6 +1,6 @@
 # 0004. Games see only the Lorikeet interface: a Scene of pieces
 
-- **Status:** Proposed
+- **Status:** Accepted, 2026-11-26. Ryan accepted option 1 on #6.
 - **Date:** 2026-11-25 (first drafted 2026-11-20 with two built-in modes; amended before acceptance)
 - **Deciders:** Ryan, Mahir
 
