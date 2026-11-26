@@ -63,12 +63,12 @@ A projector paints the game onto a surface. A webcam watches it. Every sticky no
 
 ## Two Ways to Play
 
-| Mode | A note becomes… | Built for |
+| Read as | A note becomes… | Built for |
 |---|---|---|
 | **Bodies** | a solid shape with physics | puzzles and platformers, like the egg-and-nectar puzzle |
 | **Selections** | a click on a grid | strategy and tower defense: place a note to build, peel it off to sell |
 
-Games only ever see notes through one small interface ([ADR 0004](docs/adr/0004-games-see-only-the-interface.md)), so a new game gets real sticky-note input without touching any computer vision.
+Each note reaches a game as a *piece*, through one small interface ([ADR 0004](docs/adr/0004-games-see-only-the-interface.md)), and the game decides what it means. So a new game gets real sticky-note input without touching any computer vision.
 
 ---
 
@@ -148,11 +148,11 @@ src/lorikeet/
   geometry.py          camera → projector homography
   capture.py           webcam frames                          (Phase 1)
   calibration.py       ArUco markers → homography             (Phase 1)
-  detection.py         HSV + contours → note polygons         (Phase 1)
-  tracking.py          stable note ids, debounce              (Phase 2)
-  interface.py         Note, Scene, SceneSource, modes        (Phase 2)
+  detection.py         HSV + contours → piece outlines        (Phase 1)
+  tracking.py          stable piece ids, states               (Phase 2)
+  interface.py         Piece, Scene, SceneSource, changes     (Phase 1)
   games/puzzle/        the egg-and-nectar physics puzzle      (Phase 3)
-  games/tower_defense/ selections mode                        (Phase 4)
+  games/tower_defense/ pieces as selections                   (Phase 4)
 tests/                 pytest, headless (no camera or display in CI)
 tools/                 art kit sprite scripts, GIF recorder
 docs/                  pitch, roadmap, ADRs, setup, testing, security, legal, media
@@ -166,7 +166,7 @@ docs/                  pitch, roadmap, ADRs, setup, testing, security, legal, me
 |---|---|---|---|
 | 0 | Scaffold: tooling, CI, docs, decisions | Ryan | Done |
 | 1 | See the notes: capture, calibration, detection | Mahir | Next |
-| 2 | Track notes, define the interface | Mahir | Planned |
+| 2 | Track pieces | Mahir | Planned |
 | 3 | Puzzle game (bodies) | Ryan | Prototype in review |
 | 4 | Tower defense (selections) | Ryan | Planned |
 | 5 | Demo-ready: set up from the docs in under 30 minutes | Both | Planned |
