@@ -9,7 +9,7 @@ Lorikeet's webcam points at a play surface, and anyone standing near it is in fr
 | Data | Kept? | Where |
 | --- | --- | --- |
 | Live camera frames | **No.** Processed in memory, then discarded | — |
-| Note polygons, ids, colours | Only while the app runs | Memory |
+| Piece outlines, ids, colours | Only while the app runs | Memory |
 | Calibration (a 3×3 matrix) | Yes | `.lorikeet/calibration.json` (gitignored) |
 | Debug frames | **Only if you set `LORIKEET_DEBUG_SAVE_FRAMES=1`**, with a REC badge on the projection while it's on | `.lorikeet/debug-frames/` (gitignored, local) |
 

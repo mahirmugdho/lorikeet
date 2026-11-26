@@ -1,6 +1,6 @@
 # Lorikeet
 
-Lorikeet turns a projector, a webcam, and sticky notes into physical play surfaces for games. A camera watches the projected area, computer vision finds each Post-it, and Lorikeet hands the notes to games either as **rigid bodies** (physics puzzles) or as **selections** (tower defense, strategy). Ryan (@RyanS2025) and Mahir (@mahirmugdho) are building it, with Claude.
+Lorikeet turns a projector, a webcam, and sticky notes into physical play surfaces for games. A camera watches the projected area, computer vision finds each Post-it, and Lorikeet hands each one to games as a **piece**, which a game treats as a **rigid body** (physics puzzles) or a **selection** (tower defense, strategy). Ryan (@RyanS2025) and Mahir (@mahirmugdho) are building it, with Claude.
 
 ## Start here
 
@@ -28,11 +28,11 @@ src/lorikeet/
   geometry.py        camera→projector homography (Phase 0, tested)
   capture.py         webcam frames                       (Phase 1)
   calibration.py     ArUco markers → homography          (Phase 1)
-  detection.py       HSV + contours → note polygons      (Phase 1)
-  tracking.py        stable note ids, debounce           (Phase 2)
-  interface.py       Note, Scene, SceneSource, modes     (Phase 2, the contract)
-  games/puzzle/      physics puzzle, bodies mode         (Phase 3)
-  games/tower_defense/  selections mode                  (Phase 4)
+  detection.py       HSV + contours → piece outlines     (Phase 1)
+  tracking.py        stable piece ids, states            (Phase 2)
+  interface.py       Piece, Scene, SceneSource, changes  (Phase 1, the contract)
+  games/puzzle/      physics puzzle: pieces as bodies    (Phase 3)
+  games/tower_defense/  pieces as selections             (Phase 4)
 tests/               pytest; mirrors src/, plus fixtures/ (no people in images)
 docs/                product/, adr/, security/, legal/, ROADMAP, setup, workflow, testing, BUY
 .github/             CI (Check), PR title, @claude, auto-merge, Dependabot, rulesets/main.json
@@ -40,7 +40,7 @@ docs/                product/, adr/, security/, legal/, ROADMAP, setup, workflow
 
 ## Non-negotiables
 
-1. **Games import only `lorikeet.interface`.** No `cv2`, camera frames, or detection internals under `games/` (ADR 0004).
+1. **Games import only `lorikeet.interface`.** No `cv2`, camera frames, or detection internals under `games/` (ADR 0004). `interface.py` itself imports only the standard library. `tests/test_boundaries.py` checks both.
 2. **Projector pixels are the only coordinates past detection.** Convert with the calibration homography before a note leaves the vision code (ADR 0005).
 3. **Camera frames stay in memory on this machine.** No saving, logging, or sending frames unless `LORIKEET_DEBUG_SAVE_FRAMES=1`, and then only to gitignored `.lorikeet/` (ADR 0007, [privacy](docs/legal/privacy.md)).
 4. **No people in committed images**: fixtures, screenshots, and README media ([privacy](docs/legal/privacy.md)).
@@ -89,7 +89,8 @@ docs/                product/, adr/, security/, legal/, ROADMAP, setup, workflow
 - **The projector must be an extended display, not mirrored**, or calibration is off by the resolution ratio.
 - **The projection lights up the notes.** Whatever the game draws under a note shifts its colour. Keep the area under detected notes dark/neutral, and threshold mostly on saturation (ADR 0006).
 - **Webcam auto-exposure and white balance drift** as the projected image changes. Lock them where the camera allows (`CAP_PROP_AUTO_EXPOSURE`); otherwise expect thresholds to wander.
-- **Hands cover notes.** A missing note isn't a removed note until it's been gone for `LORIKEET_STABLE_FRAMES` (Phase 2).
+- **Hands cover notes.** A settled piece that goes missing is `HIDDEN`, not removed, until it's been gone for `LORIKEET_HIDDEN_SECONDS` (2 s). Time settings are in seconds, not frames, because webcams drop frames in dim rooms.
+- **`Piece` in code, "note" in prose.** A piece is any solid-coloured sticky thing, or several touching ones merged. A moved piece is a new piece with a new id, so a settled piece never changes (ADR 0004).
 - **Tests needing pygame** set `SDL_VIDEODRIVER=dummy`; nothing in CI may open a real window or camera.
 - `docs/product/idea.md` is Mahir's original README, **verbatim**. Never edit it. Ruff 0.17+ formats code blocks inside Markdown too, so `idea.md` is excluded in `pyproject.toml`; keep it that way.
 - Games must be original: no names, art, levels, or music from existing games.

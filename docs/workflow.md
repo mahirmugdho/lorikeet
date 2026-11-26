@@ -49,9 +49,9 @@ Agreed in the scaffold PR. Rename or swap it by editing this table in a PR.
 
 | Lane | Owner | Owns | Rule |
 | --- | --- | --- | --- |
-| Vision (camera → notes) | Mahir | `capture`, `calibration`, `detection`, `tracking`, debug overlay | Emits notes in projector pixels only |
-| Games (notes → play) | Ryan | `games/puzzle`, `games/tower_defense`, launcher | Imports `lorikeet.interface` only |
-| Interface (the contract) | Mahir | `interface.py`, mode adapters, `FakeSceneSource` | Changes need the other lane's approval |
+| Vision (camera → pieces) | Mahir | `capture`, `calibration`, `detection`, `tracking`, debug overlay | Emits pieces in projector pixels only |
+| Games (pieces → play) | Ryan | `games/puzzle`, `games/tower_defense`, launcher | Imports `lorikeet.interface` only |
+| Interface (the contract) | Mahir | `interface.py`, `changes()`, `FakeSceneSource` | Changes need the other lane's approval |
 | Repo & docs | Both | CI, `.claude/`, `docs/` | Whoever notices it fixes it |
 
 Before starting work, run `gh pr list` and check open PRs so you don't collide.

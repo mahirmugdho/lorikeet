@@ -17,10 +17,10 @@ CI has no camera and no display, so everything below runs headless.
 | Geometry (homography) | Known correspondences and geometric facts (diagonals cross at the centre) | `tests/test_geometry.py` |
 | Calibration _(Phase 1)_ | Render ArUco markers into a synthetic image, warp it with a known homography, check we recover it | `tests/test_calibration.py` |
 | Detection _(Phase 1)_ | Synthetic images (numpy-drawn notes) plus fixture photos of real notes, asserting count, colour, and corners within tolerance | `tests/test_detection.py`, `tests/fixtures/` |
-| Tracking _(Phase 2)_ | Sequences of detections: ids stay stable, a note hidden for fewer than `STABLE_FRAMES` frames survives | `tests/test_tracking.py` |
-| Interface modes _(Phase 2)_ | `FakeSceneSource` drives bodies and selections; check pymunk shapes and placed/moved/removed events | `tests/test_interface.py` |
+| Tracking _(Phase 2)_ | Timed sequences of detections: ids stay stable, a piece hidden for less than `LORIKEET_HIDDEN_SECONDS` survives, a moved piece gets a new id | `tests/test_tracking.py` |
+| Interface _(Phase 1)_ | Pieces reject bad shapes; `changes()` reports placed and removed for each state change; `FakeSceneSource` plays scripted scenes | `tests/test_interface.py` |
 | Games _(Phase 3–4)_ | Scripted scenes, then assert game rules (ball reaches goal, tower built on placed) | `tests/games/` |
-| Boundary _(Phase 2)_ | No module under `games/` imports `cv2` | `tests/test_boundaries.py` |
+| Boundary | `interface.py` imports only the standard library; nothing under `games/` imports `cv2` or vision modules | `tests/test_boundaries.py` |
 | On hardware | By hand: photo or clip attached to the PR | PR template |
 
 Tests that touch pygame set `SDL_VIDEODRIVER=dummy`. Nothing in the test suite opens a camera.
