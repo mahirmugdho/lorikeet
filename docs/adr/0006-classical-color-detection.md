@@ -16,7 +16,7 @@ v1 only needs to find sticky notes: flat, brightly coloured, roughly square, on 
 
 ## Decision
 
-We will use **HSV thresholds + contour approximation** for v1, with per-colour ranges configured by `LORIKEET_NOTE_COLORS` and a tuning view in the debug overlay. Saturation does most of the work, because projected white light lowers a note's saturation less than it shifts its hue and brightness. Tracking (Phase 2) adds stable ids and debouncing so a hand covering a note doesn't delete it.
+We will use **HSV thresholds + contour approximation** for v1, with the colours listed in `LORIKEET_PIECE_COLORS`, each colour's range calibrated per setup on the live surface (lighting and surfaces change how a colour looks), and a tuning view in the debug overlay. Adding a colour is a setting, not a code change. Which touching colours merge into one piece is also a setting; by default, only pieces of the same colour merge. Saturation does most of the work, because projected white light lowers a note's saturation less than it shifts its hue and brightness. Tracking (Phase 2) adds stable ids and debouncing so a hand covering a note doesn't delete it.
 
 ## Consequences
 
