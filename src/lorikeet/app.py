@@ -69,8 +69,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         width, height = canvas.get_size()
         print(f"lorikeet: {args.input} -> {args.output}, canvas {width}x{height}")
         print(
-            "pick a colour from the palette, left-click sticks a note on, right-click peels "
-            "it off, Tab hides the palette, Esc quits"
+            "drag notes from the palette or around the surface, roll the wheel to turn the "
+            "one you hold, right-click peels one off, Tab hides the palette, Esc quits"
         )
         run(Viewer(), source, canvas, overlay=overlay)
     finally:

@@ -7,6 +7,8 @@ launcher draws it after the game, and the game never knows it's there.
 
 from __future__ import annotations
 
+import math
+
 import pygame
 
 from lorikeet.interface import PieceState, Polygon, square
@@ -30,6 +32,7 @@ UNKNOWN_PAPER = (170, 170, 170)
 
 _BAR = (0, 0, 0, 150)  # translucent, so the game shows through behind the palette
 _CHOSEN = (245, 245, 245)
+_HELD_ALPHA = 170  # a held note is drawn see-through: it's in the hand, not on the surface
 
 
 class SimOverlay:
@@ -39,7 +42,13 @@ class SimOverlay:
 
     def handle(self, event: pygame.event.Event) -> None:
         if event.type == pygame.MOUSEBUTTONDOWN:
-            self._mouse.click(event.pos, event.button)
+            self._mouse.press(event.pos, event.button)
+        elif event.type == pygame.MOUSEBUTTONUP:
+            self._mouse.release(event.pos, event.button)
+        elif event.type == pygame.MOUSEMOTION:
+            self._mouse.move(event.pos)
+        elif event.type == pygame.MOUSEWHEEL:
+            self._mouse.scroll(event.y)  # positive when the wheel rolls away from you
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
             self._mouse.show_palette = not self._mouse.show_palette
 
@@ -51,6 +60,10 @@ class SimOverlay:
                 _paper(canvas, piece.color, piece.outline)
         if self._mouse.show_palette:
             self._draw_palette(canvas)
+        held = self._mouse.held
+        outline = self._mouse.held_outline()
+        if held is not None and outline is not None:
+            _paper(canvas, held.color, outline, alpha=_HELD_ALPHA)
 
     def _draw_palette(self, canvas: pygame.Surface) -> None:
         palette = self._mouse.palette
@@ -64,8 +77,24 @@ class SimOverlay:
                 pygame.draw.polygon(canvas, _CHOSEN, square(center, palette.swatch + 10), 3)
 
 
-def _paper(canvas: pygame.Surface, color: str, outline: Polygon) -> None:
-    """A note of `color`, with a darker rim so touching notes stay easy to tell apart."""
+def _paper(canvas: pygame.Surface, color: str, outline: Polygon, alpha: int = 255) -> None:
+    """A note of `color`, with a darker rim so touching notes stay easy to tell apart.
+
+    pygame can't draw a see-through polygon straight onto the canvas, so for `alpha` below
+    255 it's drawn on a small transparent surface around the note, then laid on top.
+    """
     fill = PAPER.get(color, UNKNOWN_PAPER)
-    pygame.draw.polygon(canvas, fill, outline)
-    pygame.draw.polygon(canvas, tuple(channel * 3 // 4 for channel in fill), outline, 2)
+    rim = tuple(channel * 3 // 4 for channel in fill)
+    if alpha == 255:
+        pygame.draw.polygon(canvas, fill, outline)
+        pygame.draw.polygon(canvas, rim, outline, 2)
+        return
+    left = math.floor(min(x for x, _ in outline))
+    top = math.floor(min(y for _, y in outline))
+    width = math.ceil(max(x for x, _ in outline)) - left + 1
+    height = math.ceil(max(y for _, y in outline)) - top + 1
+    shifted = [(x - left, y - top) for x, y in outline]
+    layer = pygame.Surface((width, height), pygame.SRCALPHA)
+    pygame.draw.polygon(layer, (*fill, alpha), shifted)
+    pygame.draw.polygon(layer, (*rim, alpha), shifted, 2)
+    canvas.blit(layer, (left, top))

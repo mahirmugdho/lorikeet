@@ -63,7 +63,7 @@ class SimSceneSource:
         screen. Returns the id its piece has in every scene from now on."""
         note_id = self._next_id
         self._next_id += 1  # ids only ever count up, so one is never reused
-        outline = _turned_square(center, self.note_size, angle)
+        outline = turned_square(center, self.note_size, angle)
         self._notes[note_id] = _Note(color, outline, dropped_at=self._clock())
         return note_id
 
@@ -101,7 +101,7 @@ class SimSceneSource:
         return PieceState.MOVING
 
 
-def _turned_square(center: Point, size: float, angle: float) -> Polygon:
+def turned_square(center: Point, size: float, angle: float) -> Polygon:
     """A square's corners, clockwise on screen from the top left like `interface.square`,
     turned `angle` degrees about its centre.
 

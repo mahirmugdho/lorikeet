@@ -67,7 +67,35 @@ def test_tab_hides_the_palette(overlay: SimOverlay):
     assert pixel(drawn(overlay), YELLOW_SWATCH) != PAPER["yellow"]
 
 
+def press(pos: tuple[int, int]) -> pygame.event.Event:
+    return pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=pos, button=1)
+
+
+def release(pos: tuple[int, int]) -> pygame.event.Event:
+    return pygame.event.Event(pygame.MOUSEBUTTONUP, pos=pos, button=1)
+
+
 def test_a_click_reaches_the_sim(sim: SimSceneSource, overlay: SimOverlay):
-    overlay.handle(pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=(300, 200), button=1))
+    overlay.handle(press((300, 200)))
+    overlay.handle(release((300, 200)))
 
     assert len(sim.latest().pieces) == 1
+
+
+def test_a_held_note_follows_the_mouse(overlay: SimOverlay):
+    overlay.handle(press((300, 200)))
+    overlay.handle(pygame.event.Event(pygame.MOUSEMOTION, pos=(600, 300)))
+
+    canvas = drawn(overlay)
+    # Drawn see-through, as it's in the hand rather than on the surface.
+    assert pixel(canvas, (600, 300)) not in {(0, 0, 0), PAPER["yellow"]}
+    assert pixel(canvas, (300, 200)) == (0, 0, 0)
+
+
+def test_the_wheel_turns_the_held_note(sim: SimSceneSource, overlay: SimOverlay):
+    overlay.handle(press((300, 200)))
+    overlay.handle(pygame.event.Event(pygame.MOUSEWHEEL, x=0, y=18))  # 18 steps of 5 degrees
+    overlay.handle(release((300, 200)))
+
+    # A quarter turn clockwise takes the top-left corner to the top right (y grows down).
+    assert sim.latest().pieces[0].outline[0] == pytest.approx((350, 150))
