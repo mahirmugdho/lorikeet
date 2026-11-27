@@ -1,6 +1,6 @@
-"""Where the sim's palette sits: one swatch per colour, in a row along the bottom."""
+"""Where the desk's palette sits: one swatch per colour, in a row along the bottom."""
 
-from lorikeet.sim.palette import Palette
+from lorikeet.desk.palette import Palette
 
 # Three 60 px swatches with 20 px gaps are 220 px wide: centred on a 1000 px canvas, they
 # start at x=390. Their centres sit 20 + 30 px above the bottom edge.

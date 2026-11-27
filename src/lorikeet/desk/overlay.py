@@ -1,6 +1,6 @@
-"""The sim's overlay: what the sim draws on top of the game's frame, and its mouse input.
+"""The desk's overlay: what the desk draws on top of the game's frame, and its mouse input.
 
-With real notes, the paper is on the wall and the projector shines on it. In the sim there's
+With real notes, the paper is on the wall and the projector shines on it. In the desk there's
 no paper, so the overlay draws each note over the game's frame, then the palette. The
 launcher draws it after the game, and the game never knows it's there.
 """
@@ -11,9 +11,9 @@ import math
 
 import pygame
 
+from lorikeet.desk.mouse import DeskMouse
+from lorikeet.desk.source import DeskSceneSource
 from lorikeet.interface import PieceState, Polygon, square
-from lorikeet.sim.mouse import SimMouse
-from lorikeet.sim.source import SimSceneSource
 
 PAPER = {
     "yellow": (250, 222, 90),
@@ -24,7 +24,7 @@ PAPER = {
     "purple": (185, 145, 230),
     "red": (235, 95, 90),
 }
-"""How each colour name looks on screen. This is only for drawing the sim's notes: detection
+"""How each colour name looks on screen. This is only for drawing the desk's notes: detection
 keeps its own thresholds for each name, calibrated per room."""
 
 UNKNOWN_PAPER = (170, 170, 170)
@@ -35,8 +35,8 @@ _CHOSEN = (245, 245, 245)
 _HELD_ALPHA = 170  # a held note is drawn see-through: it's in the hand, not on the surface
 
 
-class SimOverlay:
-    def __init__(self, source: SimSceneSource, mouse: SimMouse) -> None:
+class DeskOverlay:
+    def __init__(self, source: DeskSceneSource, mouse: DeskMouse) -> None:
         self._source = source
         self._mouse = mouse
 

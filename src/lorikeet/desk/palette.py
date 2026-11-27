@@ -1,4 +1,4 @@
-"""Where the sim's palette sits: one swatch per colour, in a row centred along the bottom.
+"""Where the desk's palette sits: one swatch per colour, in a row centred along the bottom.
 
 It's only layout, in canvas pixels, so the mouse and the drawing agree on where each swatch
 is, and it's tested without a window.

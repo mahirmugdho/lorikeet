@@ -2,7 +2,7 @@
 
 Input and output are two separate choices:
 
-- input: where scenes come from. `sim` for now; `camera` arrives with detection.
+- input: where scenes come from. `desk` for now; `camera` arrives with detection.
 - output: where frames go. `window` opens a window on this screen. `projector` fills the
   projector's display, borderless, at its native resolution.
 
@@ -22,11 +22,11 @@ from typing import Protocol
 
 import pygame
 
+from lorikeet.desk.mouse import DeskMouse
+from lorikeet.desk.overlay import DeskOverlay
+from lorikeet.desk.palette import Palette
+from lorikeet.desk.source import DeskSceneSource
 from lorikeet.interface import Scene, SceneSource
-from lorikeet.sim.mouse import SimMouse
-from lorikeet.sim.overlay import SimOverlay
-from lorikeet.sim.palette import Palette
-from lorikeet.sim.source import SimSceneSource
 from lorikeet.viewer import Viewer
 
 FPS = 60
@@ -47,7 +47,7 @@ class Game(Protocol):
 
 class Overlay(Protocol):
     """Something an input draws over the game's frame, which also gets the mouse and
-    keyboard: the sim's paper notes and palette. The camera input will have none. The game
+    keyboard: the desk's paper notes and palette. The camera input will have none. The game
     never sees it: on the wall, notes are the only input."""
 
     def handle(self, event: pygame.event.Event) -> None: ...
@@ -63,9 +63,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     pygame.init()
     try:
         canvas = _open_output(args.output, args.size, args.display)
-        source = _open_sim()
+        source = _open_desk()
         palette = Palette(tuple(_piece_colors()), canvas.get_size())
-        overlay = SimOverlay(source, SimMouse(source, palette))
+        overlay = DeskOverlay(source, DeskMouse(source, palette))
         width, height = canvas.get_size()
         print(f"lorikeet: {args.input} -> {args.output}, canvas {width}x{height}")
         print(
@@ -82,7 +82,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="lorikeet", description="Run Lorikeet with a chosen input and output."
     )
-    parser.add_argument("--input", choices=["sim"], default="sim", help="where notes come from")
+    parser.add_argument("--input", choices=["desk"], default="desk", help="where notes come from")
     parser.add_argument("--output", choices=["window", "projector"], default="window")
     parser.add_argument(
         "--size",
@@ -156,8 +156,8 @@ def _open_projector(display: int) -> pygame.Surface:
     return canvas
 
 
-def _open_sim() -> SimSceneSource:
-    return SimSceneSource(
+def _open_desk() -> DeskSceneSource:
+    return DeskSceneSource(
         note_size=float(os.environ.get("LORIKEET_NOTE_SIZE", "100")),
         settle_seconds=float(os.environ.get("LORIKEET_SETTLE_SECONDS", "0.2")),
         hidden_seconds=float(os.environ.get("LORIKEET_HIDDEN_SECONDS", "2")),

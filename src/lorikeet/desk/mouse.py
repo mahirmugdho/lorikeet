@@ -1,4 +1,4 @@
-"""Mouse controls for the sim, which handle notes the way hands do on the wall.
+"""Mouse controls for the desk, which handle notes the way hands do on the wall.
 
 - Press on a note to peel it off and hold it. Press on bare surface to take a fresh note of
   the current colour, or on a palette swatch to take one of that colour (it becomes the
@@ -18,9 +18,9 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from lorikeet.desk.palette import Palette
+from lorikeet.desk.source import DeskSceneSource, turned_square
 from lorikeet.interface import Piece, PieceState, Point, Polygon
-from lorikeet.sim.palette import Palette
-from lorikeet.sim.source import SimSceneSource, turned_square
 
 LEFT, RIGHT = 1, 3
 """Mouse button numbers, as SDL (and so pygame) numbers them."""
@@ -41,8 +41,8 @@ class Held:
     cursor when you grab it off-centre."""
 
 
-class SimMouse:
-    def __init__(self, source: SimSceneSource, palette: Palette) -> None:
+class DeskMouse:
+    def __init__(self, source: DeskSceneSource, palette: Palette) -> None:
         self._source = source
         self.palette = palette
         self.color = palette.colors[0]
@@ -124,7 +124,7 @@ class SimMouse:
 
 
 def _angle(outline: Polygon) -> float:
-    """How far a sim note is turned, in degrees clockwise on screen.
+    """How far a desk note is turned, in degrees clockwise on screen.
 
     `turned_square` lists the corners from the top left, so the first edge is the note's
     top edge, and its direction is the turn.

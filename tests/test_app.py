@@ -6,7 +6,7 @@ import pygame
 import pytest
 
 from lorikeet.app import parse_args, run
-from lorikeet.sim.source import SimSceneSource
+from lorikeet.desk.source import DeskSceneSource
 from lorikeet.viewer import BACKGROUND, Viewer
 
 # The headless driver has no GPU renderer, so SCALED falls back to a slower one and says so.
@@ -39,7 +39,7 @@ class FakeOverlay:
 def test_output_defaults_to_a_window_with_a_1920x1080_canvas():
     args = parse_args([])
 
-    assert (args.input, args.output, args.size) == ("sim", "window", (1920, 1080))
+    assert (args.input, args.output, args.size) == ("desk", "window", (1920, 1080))
 
 
 def test_size_is_given_as_width_x_height():
@@ -57,7 +57,7 @@ def test_a_size_must_be_positive():
 
 
 def test_run_draws_the_game_from_the_sources_scenes(canvas: pygame.Surface):
-    source = SimSceneSource()
+    source = DeskSceneSource()
     source.drop("yellow", (160, 90))  # its left edge is at x=110
 
     run(Viewer(), source, canvas, max_frames=2)
@@ -69,13 +69,13 @@ def test_run_gives_the_overlay_the_events(canvas: pygame.Surface):
     pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=(40, 50), button=3))
     overlay = FakeOverlay()
 
-    run(Viewer(), SimSceneSource(), canvas, overlay=overlay, max_frames=1)
+    run(Viewer(), DeskSceneSource(), canvas, overlay=overlay, max_frames=1)
 
     assert pygame.MOUSEBUTTONDOWN in overlay.events
 
 
 def test_run_draws_the_overlay_over_the_game(canvas: pygame.Surface):
-    run(Viewer(), SimSceneSource(), canvas, overlay=FakeOverlay(), max_frames=1)
+    run(Viewer(), DeskSceneSource(), canvas, overlay=FakeOverlay(), max_frames=1)
 
     # The viewer fills the whole canvas, so the mark survives only if it was drawn after.
     assert canvas.get_at((0, 0))[:3] == MARK

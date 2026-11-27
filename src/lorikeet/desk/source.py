@@ -1,7 +1,7 @@
-"""Simulated notes: a `SceneSource` you stick notes onto in code (and, later, with a mouse).
+"""The notes on the desk: a `SceneSource` you stick notes onto in code or with the mouse.
 
 It stands in for the camera pipeline, so it follows the rules that pipeline will follow
-(ADR 0004). A sim that's kinder than the real wall makes games that only work on a laptop:
+(ADR 0004). A desk that's kinder than the real wall makes games that only work on a laptop:
 
 - A dropped note is MOVING until it has held still for `settle_seconds`, then SETTLED.
 - There's no way to slide a note. Moving one means picking it up and dropping it again,
@@ -10,7 +10,7 @@ It stands in for the camera pipeline, so it follows the rules that pipeline will
   from one behind a hand, so the note stays HIDDEN for `hidden_seconds` first. A note
   picked up while still MOVING disappears at once, with no grace period.
 
-Not simulated yet: touching notes of one colour merging into one piece, the short wait
+Not copied yet: touching notes of one colour merging into one piece, the short wait
 before tracking confirms a new blob, and camera noise (jitter, dropouts, colour misreads).
 """
 
@@ -33,8 +33,8 @@ class _Note:
     """When it was picked up, if it has been: it's HIDDEN until the grace period ends."""
 
 
-class SimSceneSource:
-    """Simulated notes on the surface, in projector pixels.
+class DeskSceneSource:
+    """The notes on the desk, in projector pixels.
 
     The defaults match `LORIKEET_SETTLE_SECONDS` and `LORIKEET_HIDDEN_SECONDS` in
     `.env.example`. `clock` must be monotonic, and tests pass a fake one so every
