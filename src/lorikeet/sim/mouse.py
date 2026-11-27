@@ -1,4 +1,5 @@
-"""Mouse controls for the sim: left-click sticks a note on, right-click peels one off.
+"""Mouse controls for the sim: click a palette swatch to pick a colour, left-click sticks a
+note of that colour on, right-click peels one off.
 
 There's no pygame in here, so it's tested without a window. The launcher passes on pygame's
 mouse clicks, already in canvas pixels, which are projector pixels.
@@ -7,6 +8,7 @@ mouse clicks, already in canvas pixels, which are projector pixels.
 from __future__ import annotations
 
 from lorikeet.interface import PieceState, Point, Polygon
+from lorikeet.sim.palette import Palette
 from lorikeet.sim.source import SimSceneSource
 
 LEFT, RIGHT = 1, 3
@@ -14,13 +16,20 @@ LEFT, RIGHT = 1, 3
 
 
 class SimMouse:
-    def __init__(self, source: SimSceneSource, color: str) -> None:
+    def __init__(self, source: SimSceneSource, palette: Palette) -> None:
         self._source = source
-        self.color = color
-        """The colour of the notes a left-click sticks on."""
+        self.palette = palette
+        self.color = palette.colors[0]
+        """The colour of the notes a left-click sticks on: the last swatch clicked."""
+        self.show_palette = True
+        """While False the palette is put away, and clicks where it was reach the surface."""
 
     def click(self, pos: Point, button: int) -> None:
-        if button == LEFT:
+        if self.show_palette and self.palette.covers(pos):
+            # The palette lies on top of the surface, so a click on it never reaches a note.
+            if button == LEFT:
+                self.color = self.palette.swatch_at(pos) or self.color
+        elif button == LEFT:
             self._source.drop(self.color, pos)
         elif button == RIGHT and (note := self._note_at(pos)) is not None:
             self._source.pick_up(note)

@@ -17,13 +17,15 @@ from __future__ import annotations
 
 import argparse
 import os
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from typing import Protocol
 
 import pygame
 
-from lorikeet.interface import Point, Scene, SceneSource
+from lorikeet.interface import Scene, SceneSource
 from lorikeet.sim.mouse import SimMouse
+from lorikeet.sim.overlay import SimOverlay
+from lorikeet.sim.palette import Palette
 from lorikeet.sim.source import SimSceneSource
 from lorikeet.viewer import Viewer
 
@@ -43,6 +45,16 @@ class Game(Protocol):
         ...
 
 
+class Overlay(Protocol):
+    """Something an input draws over the game's frame, which also gets the mouse and
+    keyboard: the sim's paper notes and palette. The camera input will have none. The game
+    never sees it: on the wall, notes are the only input."""
+
+    def handle(self, event: pygame.event.Event) -> None: ...
+
+    def draw(self, canvas: pygame.Surface) -> None: ...
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     # By default SDL minimises a fullscreen window when it loses focus, so clicking on the
@@ -52,11 +64,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         canvas = _open_output(args.output, args.size, args.display)
         source = _open_sim()
-        mouse = SimMouse(source, color=_piece_colors()[0])
+        palette = Palette(tuple(_piece_colors()), canvas.get_size())
+        overlay = SimOverlay(source, SimMouse(source, palette))
         width, height = canvas.get_size()
         print(f"lorikeet: {args.input} -> {args.output}, canvas {width}x{height}")
-        print("left-click sticks a note on, right-click peels it off, Esc quits")
-        run(Viewer(), source, canvas, on_click=mouse.click)
+        print(
+            "pick a colour from the palette, left-click sticks a note on, right-click peels "
+            "it off, Tab hides the palette, Esc quits"
+        )
+        run(Viewer(), source, canvas, overlay=overlay)
     finally:
         pygame.quit()
     return 0
@@ -88,14 +104,12 @@ def run(
     game: Game,
     source: SceneSource,
     canvas: pygame.Surface,
+    overlay: Overlay | None = None,
     max_frames: int | None = None,
-    on_click: Callable[[Point, int], None] | None = None,
 ) -> None:
-    """Each frame: handle input, give the game the newest scene, draw it, show it. Stops
-    on Esc or when the window closes, or after `max_frames` (for tests).
-
-    `on_click(pos, button)` gets every mouse click, in canvas pixels. The sim uses it to
-    place notes. The game never sees clicks: on the wall, notes are the only input.
+    """Each frame: handle input, give the game the newest scene, draw it, draw the overlay
+    over it, show it. Stops on Esc or when the window closes, or after `max_frames` (for
+    tests). Mouse positions arrive in canvas pixels, whatever the window's size.
     """
     clock = pygame.time.Clock()
     frames = 0
@@ -105,11 +119,13 @@ def run(
                 event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE
             ):
                 return
-            if event.type == pygame.MOUSEBUTTONDOWN and on_click is not None:
-                on_click(event.pos, event.button)
+            if overlay is not None:
+                overlay.handle(event)
         dt = clock.tick(FPS) / 1000  # also waits, so the loop runs at most FPS times a second
         game.update(source.latest(), dt)
         game.draw(canvas)
+        if overlay is not None:
+            overlay.draw(canvas)
         pygame.display.flip()
         frames += 1
 
