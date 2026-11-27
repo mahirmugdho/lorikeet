@@ -26,7 +26,8 @@ def _within(name: str, package: str) -> bool:
 
 
 def forbidden_in_games(names: set[str]) -> set[str]:
-    """Games may import anything except OpenCV and Lorikeet's vision code (CLAUDE.md rule 1)."""
+    """Games may import anything except OpenCV and Lorikeet's own code, apart from the
+    interface (what's on the wall) and the view (what to draw): CLAUDE.md rule 1, ADR 0008."""
     return {
         name
         for name in names
@@ -34,6 +35,7 @@ def forbidden_in_games(names: set[str]) -> set[str]:
         or (
             _within(name, "lorikeet")
             and not _within(name, "lorikeet.interface")
+            and not _within(name, "lorikeet.view")
             and not _within(name, "lorikeet.games")
         )
     }
@@ -45,7 +47,15 @@ def test_interface_imports_only_the_standard_library():
     assert {n for n in names if n.split(".")[0] not in sys.stdlib_module_names} == set()
 
 
-def test_games_import_only_the_interface():
+def test_view_imports_only_the_standard_library_and_the_interface():
+    # Games build Views and renderers read them, so it can't pull either side in (ADR 0008).
+    names = imported_names(SRC / "lorikeet" / "view.py")
+    outside = {n for n in names if n.split(".")[0] not in sys.stdlib_module_names}
+
+    assert {n for n in outside if not _within(n, "lorikeet.interface")} == set()
+
+
+def test_games_import_only_the_interface_and_the_view():
     for path in (SRC / "lorikeet" / "games").rglob("*.py"):
         assert forbidden_in_games(imported_names(path)) == set(), path
 
@@ -78,3 +88,8 @@ def test_games_rule_catches_the_input_and_output_choices(tmp_path: Path):
     found = forbidden_in_games(imported_names(world, root=tmp_path))
 
     assert found == {"lorikeet.desk.source.DeskSceneSource", "lorikeet.app"}
+
+
+def test_a_game_may_import_the_view():
+    # A game describes what it shows as a View, so it needs the format, never a renderer.
+    assert forbidden_in_games({"lorikeet.view.View", "lorikeet.view.Thing"}) == set()
