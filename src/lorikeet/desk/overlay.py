@@ -17,7 +17,9 @@ from collections.abc import Callable
 import pygame
 
 from lorikeet.desk.mouse import DeskMouse
-from lorikeet.desk.sketch import (
+from lorikeet.desk.source import DeskSceneSource
+from lorikeet.interface import PieceState, Point, Polygon, square
+from lorikeet.render.pencil import (
     PENCIL,
     Shadows,
     boil_frame,
@@ -26,8 +28,6 @@ from lorikeet.desk.sketch import (
     pencil_outline,
     seeded,
 )
-from lorikeet.desk.source import DeskSceneSource
-from lorikeet.interface import PieceState, Point, Polygon, square
 
 PAPER = {
     "yellow": (250, 222, 90),

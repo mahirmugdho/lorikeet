@@ -1,5 +1,9 @@
 """Drawing in a hand-drawn pencil style, with line boil and soft drop shadows.
 
+Shared by the desk's paper notes and the sketch renderer, so both are drawn by the same hand
+and boil in step. It lives with the renderers because renderers may import nothing of
+Lorikeet's but the view and each other (ADR 0008); the desk is free to import it from here.
+
 Line boil is the wobble of hand-drawn animation. Every frame was traced again by hand, so
 the lines never sit exactly still. Here, each shape gets a fresh random wobble 10 times a
 second (`BOIL_FPS`), seeded by the shape and the boil frame. So between boil frames it
