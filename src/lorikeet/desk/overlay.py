@@ -1,10 +1,11 @@
 """The desk's overlay: what the desk draws on top of the game's frame, and its mouse input.
 
 With real notes, the paper is on the wall and the projector shines on it. At the desk there
-is no paper, so the overlay draws each note over the game's frame, sketched in pencil with
-line boil and a soft shadow (see `sketch`). Then it draws the palette and, on top, the note
-in your hand, lifted higher so its shadow is bigger and softer. The launcher draws the
-overlay after the game, and the game never knows it's there.
+is no paper, so the overlay draws each stuck-down note onto the wall layer, sketched in
+pencil with line boil and a soft shadow. The game's picture then lands on the notes the way
+projected light lands on paper, so an egg passing through a zone note shows on it. In front
+of the wall it draws the palette and the note in your hand, lifted higher so its shadow is
+bigger and softer. The game never knows any of it is there.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ from lorikeet.desk.sketch import (
     seeded,
 )
 from lorikeet.desk.source import DeskSceneSource
-from lorikeet.interface import PieceState, Point, Polygon, square
+from lorikeet.interface import Piece, PieceState, Point, Polygon, square
 
 PAPER = {
     "yellow": (250, 222, 90),
@@ -85,13 +86,16 @@ class DeskOverlay:
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
             self._mouse.show_palette = not self._mouse.show_palette
 
-    def draw(self, canvas: pygame.Surface) -> None:
+    def draw_wall(self, wall: pygame.Surface) -> None:
+        """The stuck-down notes, on the wall."""
         frame = boil_frame(self._clock())
-        # Games still hear about a HIDDEN piece for the grace period, but it has been peeled
-        # off: there's no paper on the wall any more.
-        on_desk = [p for p in self._source.latest().pieces if p.state is not PieceState.HIDDEN]
-        for piece in on_desk:  # in the order they went on, so later notes lie on top
-            self._note(canvas, piece.color, piece.outline, seeded(piece.id, frame), _RESTING)
+        for piece in self._on_desk():  # in the order they went on, so later notes lie on top
+            self._note(wall, piece.color, piece.outline, seeded(piece.id, frame), _RESTING)
+
+    def draw(self, canvas: pygame.Surface) -> None:
+        """In front of the wall: the palette, the hint on an empty desk, the held note."""
+        frame = boil_frame(self._clock())
+        on_desk = self._on_desk()
         if self._mouse.show_palette:
             self._palette(canvas, frame)
             if not on_desk and self._mouse.held is None:
@@ -100,6 +104,11 @@ class DeskOverlay:
         if held is not None and outline is not None:
             rng = seeded(_HELD, frame)
             self._note(canvas, held.color, outline, rng, _LIFTED, alpha=_HELD_ALPHA)
+
+    def _on_desk(self) -> list[Piece]:
+        # Games still hear about a HIDDEN piece for the grace period, but it has been peeled
+        # off: there's no paper on the wall any more.
+        return [p for p in self._source.latest().pieces if p.state is not PieceState.HIDDEN]
 
     def _note(
         self,

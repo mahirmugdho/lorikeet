@@ -56,11 +56,13 @@ class FlatRenderer:
     def events(self) -> list[pygame.event.Event]:
         return pygame.event.get()
 
-    def draw(self, view: View, layer: pygame.Surface) -> None:
+    def draw(self, view: View, wall: pygame.Surface, layer: pygame.Surface) -> None:
         self._canvas.fill(BACKDROP)
         for thing in view.back_to_front():
             self._looks.draw(self._canvas, thing)
-        # The overlays, laid on top as they are. The layer is premultiplied (see Renderer).
+        # The picture lands on what's on the wall (see Renderer): white leaves it as it is.
+        self._canvas.blit(wall, (0, 0), special_flags=pygame.BLEND_MULT)
+        # What's in front of the wall, laid on top as it is. It's premultiplied (see Renderer).
         self._canvas.blit(layer, (0, 0), special_flags=pygame.BLEND_PREMULTIPLIED)
         pygame.display.flip()
 
