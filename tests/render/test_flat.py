@@ -205,3 +205,13 @@ def test_text_is_written_centred_where_it_is(renderer: FlatRenderer):
     around = pygame.Rect(100, 70, 120, 40)
     assert pygame.transform.average_color(screen, around)[:3] != BACKDROP
     assert pygame.transform.average_color(screen, pygame.Rect(0, 0, 60, 40))[:3] == BACKDROP
+
+
+def test_the_egg_has_a_darker_rim_so_it_shows_up_on_paper(renderer: FlatRenderer):
+    # The picture lands on paper notes like light, so a nearly white egg on a green note is
+    # just slightly brighter green. A darker rim keeps its outline visible.
+    egg = Thing(id=1, kind="egg", shape=Circle(20), position=(160, 90))
+
+    screen = shown(renderer, View(things=(egg,)))
+
+    assert sum(pixel(screen, 179, 90)) < sum(pixel(screen, 160, 90)) - 60
