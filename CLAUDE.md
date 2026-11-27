@@ -18,7 +18,7 @@ Lorikeet turns a projector, a webcam, and sticky notes into physical play surfac
 | `make test` | Tests only (`uv run pytest -q`; add `-k name` for one) |
 | `make lint` | ruff + pyright |
 | `make fmt` | Format and apply safe lint fixes |
-| `uv run lorikeet` | Play Nest at the desk (drag notes with the mouse), drawn in pencil by the sketch renderer (`--renderer flat` for the flat look), in a window; `--output projector` fills the projector, `--level` picks a level, `--game none` gives an empty desk. `--help` lists the options |
+| `uv run lorikeet` | Play Nest at the desk. Two windows open: the game window (the projection, drawn flat; `--renderer sketch` for pencil) and the desk window, where you drag notes with the mouse. `--output projector` puts the game window on the projector, `--level` picks a level, `--game none` gives an empty desk. `--help` lists the options |
 | `uv run --env-file .env lorikeet` | The same, with your `.env` settings (colours, note size, projector display) |
 | `uv run lorikeet calibrate` | Recalibrate camera → projector _(after Phase 1)_ |
 
@@ -35,7 +35,7 @@ src/lorikeet/
   view.py            View: what a game shows each frame (ADR 0008, the other contract)
   render/            renderers (flat, sketch): each draws a View its own way, owns the window
   app.py             launcher: input + renderer + output -> a game; only it knows them
-  desk/              desk input: drag notes on screen, no camera or projector
+  desk/              desk input: drag notes in the desk window, no camera or projector
   debug.py           debug overlay (press D): what games are told about each piece
   games/nest/        Nest: notes route Lori's eggs to the blossom; levels in levels/*.json
   games/puzzle/      physics puzzle: pieces as bodies    (Phase 3)
@@ -101,6 +101,7 @@ docs/                product/, adr/, security/, legal/, ROADMAP, setup, workflow
 - **`Piece` in code, "note" in prose.** A piece is any solid-coloured sticky thing, or several touching ones merged. A moved piece is a new piece with a new id, so a settled piece never changes (ADR 0004).
 - **Tests needing pygame** set `SDL_VIDEODRIVER=dummy`; nothing in CI may open a real window or camera. Tests that only draw on a `pygame.Surface` need no display at all.
 - **Games never draw, and never see input or output.** A game is `update(scene, dt)` plus `view() -> View`; the renderer the player picks draws the `View` in a window it owns (ADR 0008). Mouse, keyboard, the desk and the debug overlay are overlays. They draw onto two layers: a wall layer (white, with the desk's paper notes on it), which renderers multiply their frame by, like projected light landing on paper; and a transparent layer that every renderer lays on top unchanged.
+- **At the desk there are two windows.** The game window is the projection: only what would be projected, in the chosen renderer, with a bare wall and the debug overlay (D). The desk window draws the same `View` in pencil with the desk's paper notes and palette, and takes the mouse. The launcher reads input once a frame (`pygame.event.get()` empties the queue for every window) and each renderer's `events(pending)` keeps its own window's. The desk window draws on one frame and shows on the next, so the game window keeps 60 fps.
 - **The overlay layer is premultiplied alpha.** Draw opaque things onto it as usual, but blit anything see-through with `surface.premul_alpha()` and `special_flags=pygame.BLEND_PREMULTIPLIED`, and renderers lay the layer on with that same blend. pygame's plain blend gets see-through-over-see-through wrong on a clear layer, so the desk would look different under different renderers.
 - `docs/product/idea.md` is Mahir's original README, **verbatim**. Never edit it. Ruff 0.17+ formats code blocks inside Markdown too, so `idea.md` is excluded in `pyproject.toml`; keep it that way.
 - Games must be original: no names, art, levels, or music from existing games.

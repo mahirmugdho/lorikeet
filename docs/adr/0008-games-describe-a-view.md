@@ -26,11 +26,12 @@ We will go with option 4.
   - Kinds are plain strings, like colour names, so a game can add one without touching `view.py`. A renderer draws a kind it doesn't know in a plain default.
 - **Imports.** `view.py` imports only the standard library, plus `Point` and `Polygon` from `interface.py`. Games may import `lorikeet.interface` and `lorikeet.view` and nothing else from Lorikeet. Renderers import `lorikeet.view` and never a game. `tests/test_boundaries.py` checks both rules.
 - **The game contract.** A game is `update(scene, dt)` plus `view() -> View`. It never draws, and it never sees input or output.
-- **Renderers.** Renderers live in `lorikeet/render/`. The launcher picks one (`--renderer flat`, and others later) and tells it the output (window or projector). The renderer owns the window: it draws the `View`, multiplies it by the wall layer, lays the overlay layer on top unchanged, and passes input events back to the launcher.
+- **Renderers.** Renderers live in `lorikeet/render/`. The launcher picks one (`--renderer flat`, and others later) and tells it the output (window or projector). The renderer owns the window: it draws the `View`, multiplies it by the wall layer, lays the overlay layer on top unchanged, and passes its window's input events back to the launcher.
 - **Overlays.** Overlays (the desk, the debug overlay) hand the renderer two layers in projector pixels:
   - **The wall layer** is what's physically on the wall: white where it's bare, paper where the desk's notes are. Projected light lands on whatever it hits, so renderers multiply their frame by this layer. On the desk, the game's picture then lands on the paper notes just as it does on the real wall: an egg passing through a zone note shows on the note. With the camera, the real paper is on the real wall, and this layer stays white.
   - **The overlay layer** is what's in front of the wall, such as the desk's palette, the note in your hand, and the debug overlay. It's transparent and premultiplied, and renderers lay it on top without looking inside it.
   - Because renderers never look inside either layer, the desk looks the same under every renderer.
+- **Windows.** Each window has its own renderer and overlays. With the desk as input, the launcher opens two: the game window, which is the projection (the chosen renderer, a bare wall, the debug overlay), and the desk window, which draws the same `View` in the sketch look under the desk's two layers and takes the mouse. The launcher reads input once a frame, and each renderer keeps the events from its own window.
 
 ## Consequences
 
