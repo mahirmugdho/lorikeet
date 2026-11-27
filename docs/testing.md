@@ -21,8 +21,10 @@ CI has no camera and no display, so everything below runs headless.
 | Interface _(Phase 1)_ | Pieces reject bad shapes; `changes()` reports placed and removed for each state change; `FakeSceneSource` plays scripted scenes | `tests/test_interface.py` |
 | Games _(Phase 3–4)_ | Scripted scenes, then assert game rules (ball reaches goal, tower built on placed) | `tests/games/` |
 | Desk | A fake clock drives desk notes through tracking's rules (settle, hidden grace, new id when moved); mouse drags, the palette and the sketch overlay (including the boil's timing) are checked on plain surfaces | `tests/desk/` |
-| Launcher and debug overlay | The headless SDL driver runs a few frames: the game gets the source's scenes, overlays get every event and draw over the game in order; the debug overlay draws only edges, and only after D | `tests/test_app.py`, `tests/test_debug.py` |
-| Boundary | `interface.py` imports only the standard library; nothing under `games/` imports `cv2`, vision modules, the desk or the launcher | `tests/test_boundaries.py` |
+| View | Outlines are placed and turned clockwise; ids are unique; things come back to front by layer | `tests/test_view.py` |
+| Renderers | The flat renderer on SDL's headless driver: things drawn where they are and turned by their angle, the overlay layer laid on top | `tests/render/` |
+| Launcher and debug overlay | A fake renderer stands in for the window (no display): the game gets the source's scenes and its view reaches the renderer; overlays get every event and draw in order onto a layer cleared each frame. Drawing onto the layer looks the same as drawing straight onto the frame. The debug overlay draws only edges, and only after D | `tests/test_app.py`, `tests/test_debug.py`, `tests/desk/test_overlay.py` |
+| Boundary | `interface.py` imports only the standard library, and `view.py` only that plus the interface; games import nothing of Lorikeet's but those two; renderers never import a game, the desk or the launcher | `tests/test_boundaries.py` |
 | On hardware | By hand: photo or clip attached to the PR | PR template |
 
 Tests that touch pygame set `SDL_VIDEODRIVER=dummy`. Nothing in the test suite opens a camera.

@@ -38,6 +38,9 @@ class DebugOverlay:
         if event.type == pygame.KEYDOWN and event.key == pygame.K_d:
             self.shown = not self.shown
 
+    def draw_wall(self, wall: pygame.Surface) -> None:
+        pass  # its outlines are projected light, not paper
+
     def draw(self, canvas: pygame.Surface) -> None:
         if not self.shown:
             return
@@ -51,4 +54,10 @@ class DebugOverlay:
         text = self._font.render(f"#{piece.id} {piece.color} {piece.state.value}", True, color)
         left = min(x for x, _ in piece.outline)
         top = min(y for _, y in piece.outline)
-        canvas.blit(text, (left, top - text.get_height() - 6))
+        # Premultiplied, as the overlay layer is (see `lorikeet.render`): plain blending
+        # would give the text's soft edges a halo there.
+        canvas.blit(
+            text.premul_alpha(),
+            (left, top - text.get_height() - 6),
+            special_flags=pygame.BLEND_PREMULTIPLIED,
+        )

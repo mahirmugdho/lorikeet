@@ -1,6 +1,7 @@
 """The debug overlay shows what games are told: each piece's edge, styled by state, with its
 id, colour and state. It stays out of the way until you press D."""
 
+import numpy as np
 import pygame
 
 from lorikeet.debug import DebugOverlay
@@ -56,3 +57,35 @@ def test_a_settled_piece_has_a_heavier_edge_than_a_moving_one():
     assert changed_pixels(debug_over(note(PieceState.SETTLED))) > changed_pixels(
         debug_over(note(PieceState.MOVING))
     )
+
+
+def test_on_a_clear_layer_it_looks_the_same_as_drawn_straight_onto_the_frame():
+    # Renderers lay the overlay layer over their frame with premultiplied blending (ADR 0008),
+    # and the labels' soft edges are see-through, so they must come out the same that way.
+    overlay = DebugOverlay(FakeSceneSource([Scene(time=0.0, pieces=(note(PieceState.SETTLED),))]))
+    overlay.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_d))
+    straight = pygame.Surface((400, 300))
+    straight.fill(GAME)
+    overlay.draw(straight)
+    layer = pygame.Surface((400, 300), pygame.SRCALPHA)
+    overlay.draw(layer)
+    framed = pygame.Surface((400, 300))
+    framed.fill(GAME)
+    framed.blit(layer, (0, 0), special_flags=pygame.BLEND_PREMULTIPLIED)
+
+    difference = pygame.surfarray.array3d(straight).astype(int) - pygame.surfarray.array3d(
+        framed
+    ).astype(int)
+    assert int(np.abs(difference).max()) <= 2
+
+
+def test_it_puts_nothing_on_the_wall():
+    # Its outlines are projected light, not paper.
+    overlay = DebugOverlay(FakeSceneSource([Scene(time=0.0, pieces=(note(PieceState.SETTLED),))]))
+    overlay.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_d))
+    wall = pygame.Surface((400, 300))
+    wall.fill((255, 255, 255))
+
+    overlay.draw_wall(wall)
+
+    assert pygame.transform.average_color(wall)[:3] == (255, 255, 255)
