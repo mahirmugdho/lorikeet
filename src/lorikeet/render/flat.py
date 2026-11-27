@@ -92,6 +92,24 @@ def native_pixel_settings(environ: Mapping[str, str], platform: str) -> dict[str
     return {key: value for key, value in settings.items() if key not in environ}
 
 
+SCREEN_SHARE = 0.9
+"""How much of the screen's width and height a window may take, leaving room for the menu
+bar, dock or taskbar."""
+
+
+def window_to_fit(canvas: tuple[int, int], desktop: tuple[int, int]) -> tuple[int, int] | None:
+    """The window size that shows all of `canvas` on a `desktop` too small for it, in the
+    canvas's shape, or None when the canvas fits as it is. SCALED only scales a window up by
+    whole steps, never below the canvas, so a 1920x1080 canvas on a laptop opens past the
+    screen's edge unless the window is shrunk."""
+    width, height = canvas
+    room_w, room_h = desktop[0] * SCREEN_SHARE, desktop[1] * SCREEN_SHARE
+    if width <= room_w and height <= room_h:
+        return None
+    scale = min(room_w / width, room_h / height)
+    return (round(width * scale), round(height * scale))
+
+
 def stretch_warning(
     display: int, desktop: tuple[int, int], modes: Sequence[tuple[int, int]]
 ) -> str | None:
@@ -122,7 +140,13 @@ def _draw_thing(canvas: pygame.Surface, thing: Thing) -> None:
 def _open_window(size: tuple[int, int]) -> pygame.Surface:
     # SCALED keeps the canvas at `size` however big the window is, and maps mouse positions
     # back onto the canvas, so everything stays in projector pixels.
-    return pygame.display.set_mode(size, pygame.SCALED | pygame.RESIZABLE)
+    canvas = pygame.display.set_mode(size, pygame.SCALED | pygame.RESIZABLE)
+    if (fitted := window_to_fit(size, pygame.display.get_desktop_sizes()[0])) is not None:
+        window = pygame.Window.from_display_module()
+        window.minimum_size = fitted  # SCALED sets it to the canvas, which blocks shrinking
+        window.size = fitted  # the canvas stays `size`: SCALED shrinks the picture to fit
+        window.position = pygame.WINDOWPOS_CENTERED
+    return canvas
 
 
 def _open_projector(display: int) -> pygame.Surface:
