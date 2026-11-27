@@ -24,6 +24,9 @@ BOIL_FPS = 10
 PENCIL = (62, 58, 54)
 """Soft graphite, not black."""
 
+_MAX_SHADOWS = 256
+"""Blurred shadows kept at once: about 90 KB each, so at most about 25 MB."""
+
 
 def boil_frame(seconds: float) -> int:
     """Which drawing of the boil is showing at `seconds`."""
@@ -115,6 +118,8 @@ class Shadows:
         shape = tuple((round(x - left, 1), round(y - top, 1)) for x, y in polygon)
         key = (shape, blur, alpha)
         if key not in self._blurred:
+            if len(self._blurred) >= _MAX_SHADOWS:
+                self._blurred.clear()  # a long session can't grow it forever; it refills fast
             self._blurred[key] = _blurred_shadow(shape, blur, alpha)
         pad = 3 * blur  # room for the blur to fade out
         canvas.blit(self._blurred[key], (left - pad + offset[0], top - pad + offset[1]))
