@@ -58,10 +58,13 @@ def test_the_lines_are_redrawn_on_the_next_boil_frame():
     assert pygame.image.tobytes(sketched(ledge(), at=0.1), "RGB") != first
 
 
-def test_a_note_draws_nothing_because_the_desk_or_the_wall_has_the_paper():
-    note = Thing(id=1, kind="note", shape=LEDGE, position=(160, 90))
+def test_a_note_is_outlined_just_outside_its_edge_and_its_paper_left_alone():
+    note = Thing(id=1, kind="note", shape=LEDGE, position=(160, 90))  # 100..220, 60..120
 
-    assert pygame.transform.average_color(sketched(note))[:3] == PAPER
+    canvas = sketched(note)
+
+    assert darkest(canvas, pygame.Rect(130, 48, 60, 12)) < 120
+    assert pygame.transform.average_color(canvas, pygame.Rect(108, 68, 104, 44))[:3] == PAPER
 
 
 def test_the_go_spot_leaves_its_middle_empty_for_the_note_on_it():

@@ -68,6 +68,20 @@ def pencil_outline(
             pygame.draw.lines(canvas, color, False, _stroke(a, b, rng), 2)
 
 
+NOTE_GAP = 6.0
+"""Pixels between a note's edge and the pencil line drawn around it."""
+
+
+def around(polygon: Polygon, gap: float = NOTE_GAP) -> Polygon:
+    """`polygon` grown outwards by about `gap` pixels, by moving each corner away from the
+    middle. It's exact for a square note and close enough for a merged, L-shaped one."""
+    cx = sum(x for x, _ in polygon) / len(polygon)
+    cy = sum(y for _, y in polygon) / len(polygon)
+    reach = sum(math.hypot(x - cx, y - cy) for x, y in polygon) / len(polygon) or 1.0
+    grow = 1 + gap / reach
+    return tuple((cx + (x - cx) * grow, cy + (y - cy) * grow) for x, y in polygon)
+
+
 def pencil_loop(
     canvas: pygame.Surface, center: Point, radius: float, rng: random.Random, color=PENCIL
 ) -> None:

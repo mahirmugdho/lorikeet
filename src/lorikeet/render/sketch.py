@@ -21,7 +21,15 @@ import pygame
 
 from lorikeet.interface import Point, Polygon
 from lorikeet.render.flat import FlatRenderer
-from lorikeet.render.pencil import PENCIL, boil_frame, jittered, pencil_loop, pencil_outline, seeded
+from lorikeet.render.pencil import (
+    PENCIL,
+    around,
+    boil_frame,
+    jittered,
+    pencil_loop,
+    pencil_outline,
+    seeded,
+)
 from lorikeet.view import Circle, Outline, Text, Thing
 
 PAPER = (240, 236, 226)
@@ -56,7 +64,7 @@ class SketchLooks:
             "bird": self._bird,
             "blossom": self._blossom,
             "go": self._go,
-            "note": lambda canvas, thing, rng: None,
+            "note": self._note,
         }
 
     def draw(self, canvas: pygame.Surface, thing: Thing) -> None:
@@ -115,6 +123,10 @@ class SketchLooks:
             pencil_loop(canvas, petal, 0.46 * r, rng)
         pygame.draw.circle(canvas, WASHES["blossom-centre"], (x, y), 0.36 * r)
         pencil_loop(canvas, (x, y), 0.36 * r, rng)
+
+    def _note(self, canvas: pygame.Surface, thing: Thing, rng: random.Random) -> None:
+        """A pencil outline round the note, its paper left alone (as in the flat look)."""
+        pencil_outline(canvas, around(_points(thing)), rng)
 
     def _go(self, canvas: pygame.Surface, thing: Thing, rng: random.Random) -> None:
         """A pencil ring, gone over twice once a note is on it. The middle stays empty: a
