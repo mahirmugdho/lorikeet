@@ -253,3 +253,40 @@ def test_clearing_the_wall_before_a_win_changes_nothing():
     game.update(Scene(time=0.0), 1 / 60)
 
     assert game.outcomes == [Outcome.FELL]
+
+
+def drop_note_on_the_falling_egg(game: NestGame, go: Piece) -> Piece:
+    """Let an egg out, then stick a note over it, a little to one side so that pushing the
+    egg out the short way would shove it sideways."""
+    run(game, Scene(time=0.0, pieces=(go,)), seconds=LAY_DELAY + 0.3)
+    assert game.egg is not None
+    x, y = game.egg
+    return note(1, (x + 20, y))
+
+
+def test_a_note_stuck_on_top_of_the_egg_does_not_shove_it():
+    level = made_up()  # nothing under the nest: the egg falls straight down at x=200
+    game = NestGame(level)
+    go = go_note(level)
+    on_egg = drop_note_on_the_falling_egg(game, go)
+
+    xs = []
+    for _ in range(60):
+        game.update(Scene(time=0.0, pieces=(go, on_egg)), 1 / 60)
+        if game.egg is not None:
+            xs.append(game.egg[0])
+
+    assert max(abs(x - 200) for x in xs) < 2  # still falling straight down
+
+
+def test_that_note_becomes_ground_once_the_egg_is_clear_of_it():
+    level = made_up()
+    game = NestGame(level)
+    go = go_note(level)
+    on_egg = drop_note_on_the_falling_egg(game, go)
+    scene = Scene(time=0.0, pieces=(go, on_egg))
+    run_until_outcome(game, scene)  # the first egg falls through and off the canvas
+
+    run(game, scene, seconds=LAY_DELAY + 2)  # the next egg drops onto the note
+
+    assert game.egg is not None and game.egg[1] < on_egg.center[1]  # resting on top of it

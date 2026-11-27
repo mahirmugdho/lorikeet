@@ -40,14 +40,31 @@ class World:
 
     def set_notes(self, pieces: Iterable[Piece]) -> None:
         """Make exactly these pieces solid. A settled piece never changes shape (ADR 0004), so
-        each one is built once, when it first appears, and removed when it's gone."""
+        each one is built once, when it first appears, and removed when it's gone.
+
+        A note stuck on top of the egg waits: it becomes solid once the egg is clear of it.
+        Made solid at once, it would overlap the egg, and the physics would shove the egg out
+        hard. This is called every frame, so a waiting note is checked again each time."""
         wanted = {piece.id: piece for piece in pieces}
         for gone in self._notes.keys() - wanted.keys():
             self._space.remove(*self._notes.pop(gone))
         for piece_id in wanted.keys() - self._notes.keys():
             shapes = [_ground(self._space.static_body, part) for part in wanted[piece_id].parts]
+            if self._overlaps_egg(shapes):
+                continue
             self._space.add(*shapes)
             self._notes[piece_id] = shapes
+
+    def _overlaps_egg(self, shapes: list[pymunk.Poly]) -> bool:
+        egg = self.egg
+        if egg is None:
+            return False
+        for shape in shapes:
+            shape.cache_bb()  # a shape not yet added doesn't know where its corners are
+            # Negative inside the shape, otherwise the distance to its nearest edge.
+            if shape.point_query(egg).distance < EGG_RADIUS:
+                return True
+        return False
 
     def lay_egg(self, at: Point, velocity: tuple[float, float]) -> None:
         self.remove_egg()
