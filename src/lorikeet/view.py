@@ -49,6 +49,21 @@ class Outline:
 
 
 @dataclass(frozen=True)
+class Text:
+    """Words to show, such as a message when a level is won. They're written centred on
+    the thing's position, `size` pixels tall; renderers ignore the thing's angle."""
+
+    text: str
+    size: float
+
+    def __post_init__(self) -> None:
+        if not self.text.strip():
+            raise ValueError("text needs some words")
+        if self.size <= 0:
+            raise ValueError(f"text size must be positive, got {self.size}")
+
+
+@dataclass(frozen=True)
 class Thing:
     """One thing on screen."""
 
@@ -60,7 +75,7 @@ class Thing:
     a look per kind, and a plain default for kinds it doesn't know, so a game can add a kind
     without changing this file or any renderer."""
 
-    shape: Circle | Outline
+    shape: Circle | Outline | Text
 
     position: Point = (0.0, 0.0)
     """Where its origin is, in projector pixels (ADR 0005)."""

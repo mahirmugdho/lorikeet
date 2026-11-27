@@ -23,7 +23,7 @@ from collections.abc import Callable, Sequence
 import pygame
 
 from lorikeet.interface import Point
-from lorikeet.view import Circle, Outline, Thing
+from lorikeet.view import Circle, Outline, Text, Thing
 
 DEFAULT_FILL = (150, 146, 140)
 DEFAULT_EDGE = (105, 101, 96)
@@ -45,6 +45,8 @@ BIRD, BIRD_BELLY, BIRD_WING, BIRD_HEAD = (
 BEAK, EYE = (226, 176, 118), (44, 40, 40)
 PETAL, BLOSSOM_CENTRE = (234, 186, 200), (238, 214, 146)
 GO_RING, GO_TEXT = (120, 156, 120), (96, 124, 96)
+INK, SOFT_INK = (66, 62, 58), (116, 110, 104)
+"""Words: dark and neutral, so projected text never looks like a note to the camera."""
 
 ROUNDING = 10.0
 """How round terrain corners are, in pixels."""
@@ -62,6 +64,7 @@ class FlatLooks:
         pygame.font.init()
         self._font = pygame.font.Font(None, 30)  # None picks the font pygame ships with
         self._shadows: dict[tuple[object, ...], pygame.Surface] = {}
+        self._fonts: dict[int, pygame.font.Font] = {}
         self._looks: dict[str, Look] = {
             "terrain": self._terrain,
             "egg": self._egg,
@@ -73,7 +76,20 @@ class FlatLooks:
         }
 
     def draw(self, canvas: pygame.Surface, thing: Thing) -> None:
+        if isinstance(thing.shape, Text):
+            self._text(canvas, thing, thing.shape)
+            return
         self._looks.get(thing.kind, _default)(canvas, thing)
+
+    def _text(self, canvas: pygame.Surface, thing: Thing, text: Text) -> None:
+        """Words centred on the thing: a "hint" in a softer ink, anything else in the dark one."""
+        size = max(8, round(text.size))
+        if size not in self._fonts:
+            self._fonts[size] = pygame.font.Font(None, size)  # None picks pygame's own font
+        color = SOFT_INK if thing.kind == "hint" else INK
+        words = self._fonts[size].render(text.text, True, color)
+        x, y = thing.position
+        canvas.blit(words, words.get_rect(center=(round(x), round(y))))
 
     def _terrain(self, canvas: pygame.Surface, thing: Thing) -> None:
         if not isinstance(thing.shape, Outline):
@@ -191,6 +207,8 @@ class FlatLooks:
 
 
 def _default(canvas: pygame.Surface, thing: Thing) -> None:
+    if isinstance(thing.shape, Text):
+        return  # words are written by FlatLooks.draw before any look is picked
     if isinstance(thing.shape, Circle):
         pygame.draw.circle(canvas, DEFAULT_FILL, thing.position, thing.shape.radius)
         pygame.draw.circle(canvas, DEFAULT_EDGE, thing.position, thing.shape.radius, 2)

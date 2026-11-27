@@ -8,7 +8,7 @@ import pytest
 
 from lorikeet.render.flat import BACKDROP, FlatRenderer, native_pixel_settings, stretch_warning
 from lorikeet.render.flat_looks import DEFAULT_FILL
-from lorikeet.view import Circle, Outline, Thing, View
+from lorikeet.view import Circle, Outline, Text, Thing, View
 
 # The headless driver has no GPU renderer, so SCALED falls back to a slower one and says so.
 pytestmark = pytest.mark.filterwarnings("ignore:no fast renderer available")
@@ -169,3 +169,13 @@ def test_a_kind_without_a_look_gets_the_plain_default(renderer: FlatRenderer):
     thing = Thing(id=1, kind="mystery", shape=Circle(20), position=(160, 90))
 
     assert pixel(shown(renderer, View(things=(thing,))), 160, 90) == DEFAULT_FILL
+
+
+def test_text_is_written_centred_where_it_is(renderer: FlatRenderer):
+    words = Thing(id=1, kind="message", shape=Text("Hello", size=40), position=(160, 90))
+
+    screen = shown(renderer, View(things=(words,)))
+
+    around = pygame.Rect(100, 70, 120, 40)
+    assert pygame.transform.average_color(screen, around)[:3] != BACKDROP
+    assert pygame.transform.average_color(screen, pygame.Rect(0, 0, 60, 40))[:3] == BACKDROP
