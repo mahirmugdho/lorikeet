@@ -18,7 +18,7 @@ Lorikeet turns a projector, a webcam, and sticky notes into physical play surfac
 | `make test` | Tests only (`uv run pytest -q`; add `-k name` for one) |
 | `make lint` | ruff + pyright |
 | `make fmt` | Format and apply safe lint fixes |
-| `uv run lorikeet` | Play Nest at the desk (drag notes with the mouse), drawn by the flat renderer, in a window; `--output projector` fills the projector, `--level` picks a level, `--game none` gives an empty desk. `--help` lists the options |
+| `uv run lorikeet` | Play Nest at the desk (drag notes with the mouse), drawn in pencil by the sketch renderer (`--renderer flat` for the flat look), in a window; `--output projector` fills the projector, `--level` picks a level, `--game none` gives an empty desk. `--help` lists the options |
 | `uv run --env-file .env lorikeet` | The same, with your `.env` settings (colours, note size, projector display) |
 | `uv run lorikeet calibrate` | Recalibrate camera → projector _(after Phase 1)_ |
 
@@ -33,7 +33,7 @@ src/lorikeet/
   tracking.py        stable piece ids, states            (Phase 2)
   interface.py       Piece, Scene, SceneSource, changes  (Phase 1, the contract)
   view.py            View: what a game shows each frame (ADR 0008, the other contract)
-  render/            renderers: each draws a View its own way and owns the window
+  render/            renderers (flat, sketch): each draws a View its own way, owns the window
   app.py             launcher: input + renderer + output -> a game; only it knows them
   desk/              desk input: drag notes on screen, no camera or projector
   debug.py           debug overlay (press D): what games are told about each piece
