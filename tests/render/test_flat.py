@@ -6,7 +6,7 @@ from collections.abc import Iterator
 import pygame
 import pytest
 
-from lorikeet.render.flat import BACKDROP, FlatRenderer
+from lorikeet.render.flat import BACKDROP, FlatRenderer, native_pixel_settings, stretch_warning
 from lorikeet.view import Circle, Outline, Thing, View
 
 # The headless driver has no GPU renderer, so SCALED falls back to a slower one and says so.
@@ -83,3 +83,44 @@ def test_projector_output_explains_a_missing_display(monkeypatch: pytest.MonkeyP
             FlatRenderer("projector", SIZE, display=7)
     finally:
         pygame.quit()
+
+
+WAYLAND_SESSION = {"WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"}
+
+
+def test_in_a_wayland_session_on_linux_it_draws_through_wayland():
+    # Through X11 (XWayland), a desktop with any display scaling can stretch the window,
+    # the projector's included. Through Wayland, the window gets the display's own pixels.
+    assert native_pixel_settings(WAYLAND_SESSION, "linux") == {"SDL_VIDEODRIVER": "wayland"}
+
+
+def test_in_an_x11_session_it_leaves_the_driver_alone():
+    assert native_pixel_settings({"DISPLAY": ":0"}, "linux") == {}
+
+
+def test_a_driver_you_chose_yourself_is_kept():
+    chosen = {**WAYLAND_SESSION, "SDL_VIDEODRIVER": "x11"}
+
+    assert native_pixel_settings(chosen, "linux") == {}
+
+
+def test_on_windows_it_handles_display_scaling_itself():
+    assert native_pixel_settings({}, "win32") == {"SDL_WINDOWS_DPI_AWARENESS": "permonitorv2"}
+
+
+def test_on_macos_it_changes_nothing():
+    assert native_pixel_settings({}, "darwin") == {}
+
+
+def test_no_warning_when_the_desktop_gives_the_display_all_its_pixels():
+    assert stretch_warning(1, (1920, 1080), [(1920, 1080), (1280, 720)]) is None
+
+
+def test_a_warning_names_both_sizes_when_the_display_could_show_more():
+    warning = stretch_warning(1, (1280, 720), [(1920, 1080), (1280, 720)])
+
+    assert warning is not None and "1280x720" in warning and "1920x1080" in warning
+
+
+def test_no_warning_when_the_display_lists_no_modes():
+    assert stretch_warning(1, (1920, 1080), []) is None
