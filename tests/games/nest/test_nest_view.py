@@ -7,7 +7,7 @@ import pytest
 from lorikeet.games.nest.game import LAY_DELAY, NestGame
 from lorikeet.games.nest.level import Level, parse_level
 from lorikeet.interface import Piece, PieceState, Point, Scene
-from lorikeet.view import Circle, Outline, Thing, View
+from lorikeet.view import Circle, Outline, Text, Thing, View
 
 LEVEL: Level = parse_level(
     {
@@ -105,3 +105,33 @@ def test_the_egg_is_drawn_in_front_of_everything_else():
     view = shown(GO_NOTE, seconds=LAY_DELAY + 0.1)
 
     assert view.back_to_front()[-1].kind == "egg"
+
+
+def texts(view: View, kind: str) -> list[str]:
+    return [t.shape.text for t in view.things if t.kind == kind and isinstance(t.shape, Text)]
+
+
+def test_a_hint_says_how_to_start_until_a_note_is_on_the_go_ring():
+    assert (bool(texts(shown(), "hint")), texts(shown(GO_NOTE), "hint")) == (True, [])
+
+
+def test_a_win_says_so_and_says_how_to_play_again():
+    level = parse_level(
+        {
+            "format": 1,
+            "name": "Won",
+            "size": [1000, 600],
+            "nest": {"at": [200, 100], "launch": [0, 0]},
+            "blossom": {"at": [200, 400], "radius": 40},  # right under the nest
+            "go": {"at": [900, 550], "radius": 40},
+            "terrain": [],
+        }
+    )
+    game = NestGame(level)
+    scene = Scene(time=0.0, pieces=(note(99, level.go.at),))
+    for _ in range(4 * 120):
+        game.update(scene, 1 / 120)
+
+    view = game.view()
+
+    assert texts(view, "message") and "notes off" in texts(view, "hint")[0]

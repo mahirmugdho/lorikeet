@@ -202,3 +202,54 @@ def test_no_level_is_won_by_the_go_note_alone(level_id: str):
     run(game, Scene(time=0.0, pieces=(go_note(level),)), seconds=20)
 
     assert game.state is not State.WON
+
+
+def win(game: NestGame, scene: Scene) -> None:
+    for _ in range(10 * 60):
+        if game.state is State.WON:
+            return
+        game.update(scene, 1 / 60)
+    raise AssertionError(f"never won: {game.outcomes}")
+
+
+GOAL_UNDER_NEST = {"blossom": {"at": [200, 400], "radius": 40}}
+
+
+def test_clearing_the_wall_after_a_win_plays_the_level_again():
+    level = made_up(**GOAL_UNDER_NEST)
+    game = NestGame(level)
+    win(game, Scene(time=0.0, pieces=(go_note(level),)))
+
+    game.update(Scene(time=0.0), 1 / 60)
+
+    assert (game.state, game.outcomes, game.level) == (State.WAITING, [], level)
+
+
+def test_with_more_levels_clearing_the_wall_after_a_win_moves_to_the_next():
+    first, second = made_up(**GOAL_UNDER_NEST), made_up(name="Second", **GOAL_UNDER_NEST)
+    game = NestGame(first, second)
+    win(game, Scene(time=0.0, pieces=(go_note(first),)))
+
+    game.update(Scene(time=0.0), 1 / 60)
+
+    assert game.level is second
+
+
+def test_after_the_last_level_it_goes_back_to_the_first():
+    first, second = made_up(**GOAL_UNDER_NEST), made_up(name="Second", **GOAL_UNDER_NEST)
+    game = NestGame(first, second)
+    for _ in range(2):
+        win(game, Scene(time=0.0, pieces=(go_note(game.level),)))
+        game.update(Scene(time=0.0), 1 / 60)
+
+    assert game.level is first
+
+
+def test_clearing_the_wall_before_a_win_changes_nothing():
+    level = made_up()
+    game = NestGame(level)
+    run_until_outcome(game, Scene(time=0.0, pieces=(go_note(level),)))
+
+    game.update(Scene(time=0.0), 1 / 60)
+
+    assert game.outcomes == [Outcome.FELL]

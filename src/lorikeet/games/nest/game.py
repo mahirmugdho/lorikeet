@@ -13,6 +13,9 @@ Each frame the launcher calls `update(scene, dt)` with the newest scene (ADR 000
   no more eggs come), falls off the canvas, or stalls: it gets no closer to the blossom for
   the level's `timeout_s`. Taking the go note off stops new eggs; an egg already out
   finishes.
+- **After a win.** A message says so, and asks for the notes to come off. Once the wall is
+  clear (no notes at all), the next level starts, or the same one again if it's the only
+  one. Everything is done with notes, because there's no keyboard at the wall.
 
 Time moves in fixed steps of `STEP` seconds, however long frames take. So the game runs at
 the same speed on any screen, and the same notes always play out exactly the same way, which
@@ -27,7 +30,7 @@ from enum import Enum
 from lorikeet.games.nest.level import Level, Spot
 from lorikeet.games.nest.world import EGG_RADIUS, World
 from lorikeet.interface import Piece, PieceState, Point, Polygon, Scene
-from lorikeet.view import Circle, Outline, Thing, View
+from lorikeet.view import Circle, Outline, Text, Thing, View
 
 STEP = 1 / 120
 """Seconds per physics step."""
@@ -46,12 +49,15 @@ _PLACED = frozenset({PieceState.SETTLED, PieceState.HIDDEN})
 
 # Thing ids in the View, kept apart so each kind of thing has its own range: renderers rely
 # on an id meaning the same thing from frame to frame.
-_BLOSSOM, _GO, _NEST, _LORI = 1, 2, 3, 4
+_BLOSSOM, _GO, _NEST, _LORI, _MESSAGE, _HINT = 1, 2, 3, 4, 5, 6
 _TERRAIN, _EGGS, _NOTES = 100, 1000, 100_000
 
 NEST_RADIUS, LORI_RADIUS = 40.0, 34.0
 LORI_FROM_NEST = (-70.0, -14.0)
 """Where Lori sits: just left of her nest, facing it."""
+
+START_HINT = "Stick a note on the go ring to start"
+WON_MESSAGE = "Lori's egg made it!"
 
 
 class State(Enum):
@@ -72,14 +78,25 @@ class Outcome(Enum):
 
 
 class NestGame:
-    def __init__(self, level: Level) -> None:
-        self.level = level
+    def __init__(self, first: Level, *more: Level) -> None:
+        """Play `first`, then each of `more` in turn after a win, and back to `first`."""
+        self._levels = (first, *more)
+        self._index = 0
+        self._lag = 0.0  # game time owed, not yet stepped
+        self._start()
+
+    @property
+    def level(self) -> Level:
+        """The level being played."""
+        return self._levels[self._index]
+
+    def _start(self) -> None:
+        """Start the current level afresh."""
         self.outcomes: list[Outcome] = []
         """How each egg so far has ended, oldest first."""
-        self._world = World(level)
+        self._world = World(self.level)
         self._ground: tuple[Piece, ...] = ()  # the notes that are ground right now
         self._go_on = False
-        self._lag = 0.0  # game time owed, not yet stepped
         self._until_egg = LAY_DELAY
         self._closest = math.inf  # the egg's closest distance to the blossom so far
         self._since_progress = 0.0
@@ -98,6 +115,10 @@ class NestGame:
         return self._world.egg
 
     def update(self, scene: Scene, dt: float) -> None:
+        if self.state is State.WON and not scene.pieces:
+            # The wall is clear after a win: on to the next level (or this one again).
+            self._index = (self._index + 1) % len(self._levels)
+            self._start()
         placed = [piece for piece in scene.pieces if piece.state in _PLACED]
         go_notes = {piece.id for piece in placed if _on(self.level.go, piece.center)}
         self._go_on = bool(go_notes)
@@ -157,7 +178,24 @@ class NestGame:
                     layer=3,
                 )
             )
+        things.extend(self._words(state))
         return View(things=tuple(things))
+
+    def _words(self, state: State) -> list[Thing]:
+        """The start hint while nothing's happening, or the win message and what to do next.
+        At the top of the canvas, in front of everything."""
+        width, height = self.level.size
+        top = (width / 2, height * 0.16)
+        below = (width / 2, height * 0.16 + 70)
+        if state is State.WON:
+            then = "for the next level" if len(self._levels) > 1 else "to play again"
+            return [
+                Thing(_MESSAGE, "message", Text(WON_MESSAGE, 76), top, layer=4),
+                Thing(_HINT, "hint", Text(f"Take the notes off {then}", 40), below, layer=4),
+            ]
+        if state is State.WAITING:
+            return [Thing(_HINT, "hint", Text(START_HINT, 40), top, layer=4)]
+        return []
 
     def _step(self) -> None:
         if self.state is State.WON:

@@ -175,14 +175,18 @@ def run(
 def _open_game(name: str, level_id: str, canvas: tuple[int, int]) -> Game:
     if name == "none":
         return NoGame()
-    level = load_level(level_id)
+    ids = level_ids()
+    start = ids.index(level_id)
+    # The chosen level first, then the rest in order, coming round to the start again.
+    first, *more = (load_level(i) for i in ids[start:] + ids[:start])
+    level = first
     if level.size != canvas:
         print(
             f"lorikeet: {level_id} is laid out for {level.size[0]}x{level.size[1]}, but the "
             f"canvas is {canvas[0]}x{canvas[1]}, so it won't fit the screen exactly.",
             file=sys.stderr,
         )
-    return NestGame(level)
+    return NestGame(first, *more)
 
 
 def _open_desk() -> DeskSceneSource:
