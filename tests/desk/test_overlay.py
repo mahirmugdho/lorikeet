@@ -1,4 +1,5 @@
-"""The desk's overlay: notes drawn as paper over the game's frame, the palette, and the mouse."""
+"""The desk's overlay: notes sketched as paper over the game's frame, the palette, and the
+mouse."""
 
 import pygame
 import pytest
@@ -11,6 +12,8 @@ from lorikeet.desk.source import DeskSceneSource
 SIZE = (1000, 600)
 PALETTE = Palette(("yellow", "pink"), canvas_size=SIZE)
 YELLOW_SWATCH = PALETTE.swatches()[0][1]
+HINT_BAND = pygame.Rect(0, 430, 1000, 60)  # just above the palette bar, whose top is at y=500
+LIGHT = (200, 200, 200)
 
 
 @pytest.fixture
@@ -24,14 +27,19 @@ def desk(now: list[float]) -> DeskSceneSource:
 
 
 @pytest.fixture
-def overlay(desk: DeskSceneSource) -> DeskOverlay:
-    return DeskOverlay(desk, DeskMouse(desk, PALETTE))
+def overlay(desk: DeskSceneSource, now: list[float]) -> DeskOverlay:
+    return DeskOverlay(desk, DeskMouse(desk, PALETTE), clock=lambda: now[0])
 
 
-def drawn(overlay: DeskOverlay) -> pygame.Surface:
+def drawn(overlay: DeskOverlay, ground: tuple[int, int, int] = (0, 0, 0)) -> pygame.Surface:
     canvas = pygame.Surface(SIZE)
+    canvas.fill(ground)
     overlay.draw(canvas)
     return canvas
+
+
+def band_is_empty(canvas: pygame.Surface) -> bool:
+    return pygame.transform.average_color(canvas, HINT_BAND)[:3] == (0, 0, 0)
 
 
 def pixel(canvas: pygame.Surface, point: tuple[float, float]) -> tuple[int, int, int]:
@@ -99,3 +107,39 @@ def test_the_wheel_turns_the_held_note(desk: DeskSceneSource, overlay: DeskOverl
 
     # A quarter turn clockwise takes the top-left corner to the top right (y grows down).
     assert desk.latest().pieces[0].outline[0] == pytest.approx((350, 150))
+
+
+def test_a_note_casts_a_soft_shadow_below_it(desk: DeskSceneSource, overlay: DeskOverlay):
+    desk.drop("pink", (300, 200))  # its bottom edge is at y=250
+
+    assert sum(pixel(drawn(overlay, LIGHT), (300, 258))) < sum(LIGHT)
+
+
+def test_the_lines_hold_still_within_a_boil_frame(
+    desk: DeskSceneSource, overlay: DeskOverlay, now: list[float]
+):
+    desk.drop("pink", (300, 200))
+    first = pygame.image.tobytes(drawn(overlay), "RGB")
+    now[0] = 0.05  # still the first tenth of a second
+
+    assert pygame.image.tobytes(drawn(overlay), "RGB") == first
+
+
+def test_the_lines_are_redrawn_on_the_next_boil_frame(
+    desk: DeskSceneSource, overlay: DeskOverlay, now: list[float]
+):
+    desk.drop("pink", (300, 200))
+    first = pygame.image.tobytes(drawn(overlay), "RGB")
+    now[0] = 0.1  # the next tenth of a second
+
+    assert pygame.image.tobytes(drawn(overlay), "RGB") != first
+
+
+def test_an_empty_desk_shows_how_to_start(overlay: DeskOverlay):
+    assert not band_is_empty(drawn(overlay))
+
+
+def test_the_hint_goes_once_a_note_is_on_the_desk(desk: DeskSceneSource, overlay: DeskOverlay):
+    desk.drop("pink", (300, 200))
+
+    assert band_is_empty(drawn(overlay))
