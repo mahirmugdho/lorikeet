@@ -43,3 +43,19 @@ def test_run_draws_the_game_from_the_sources_scenes(monkeypatch: pytest.MonkeyPa
         assert canvas.get_at((110, 90))[:3] != BACKGROUND
     finally:
         pygame.quit()
+
+
+@pytest.mark.filterwarnings("ignore:no fast renderer available")
+def test_run_passes_mouse_clicks_on_in_canvas_pixels(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    pygame.display.init()
+    try:
+        canvas = pygame.display.set_mode((320, 180), pygame.SCALED)
+        clicks: list[tuple[tuple[int, int], int]] = []
+        pygame.event.post(pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=(40, 50), button=3))
+
+        run(Viewer(), SimSceneSource(), canvas, max_frames=1, on_click=lambda *c: clicks.append(c))
+
+        assert clicks == [((40, 50), 3)]
+    finally:
+        pygame.quit()

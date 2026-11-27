@@ -17,12 +17,13 @@ from __future__ import annotations
 
 import argparse
 import os
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Protocol
 
 import pygame
 
-from lorikeet.interface import Scene, SceneSource
+from lorikeet.interface import Point, Scene, SceneSource
+from lorikeet.sim.mouse import SimMouse
 from lorikeet.sim.source import SimSceneSource
 from lorikeet.viewer import Viewer
 
@@ -51,9 +52,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         canvas = _open_output(args.output, args.size, args.display)
         source = _open_sim()
+        mouse = SimMouse(source, color=_piece_colors()[0])
         width, height = canvas.get_size()
         print(f"lorikeet: {args.input} -> {args.output}, canvas {width}x{height}")
-        run(Viewer(), source, canvas)
+        print("left-click sticks a note on, right-click peels it off, Esc quits")
+        run(Viewer(), source, canvas, on_click=mouse.click)
     finally:
         pygame.quit()
     return 0
@@ -82,10 +85,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def run(
-    game: Game, source: SceneSource, canvas: pygame.Surface, max_frames: int | None = None
+    game: Game,
+    source: SceneSource,
+    canvas: pygame.Surface,
+    max_frames: int | None = None,
+    on_click: Callable[[Point, int], None] | None = None,
 ) -> None:
     """Each frame: handle input, give the game the newest scene, draw it, show it. Stops
-    on Esc or when the window closes, or after `max_frames` (for tests)."""
+    on Esc or when the window closes, or after `max_frames` (for tests).
+
+    `on_click(pos, button)` gets every mouse click, in canvas pixels. The sim uses it to
+    place notes. The game never sees clicks: on the wall, notes are the only input.
+    """
     clock = pygame.time.Clock()
     frames = 0
     while max_frames is None or frames < max_frames:
@@ -94,6 +105,8 @@ def run(
                 event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE
             ):
                 return
+            if event.type == pygame.MOUSEBUTTONDOWN and on_click is not None:
+                on_click(event.pos, event.button)
         dt = clock.tick(FPS) / 1000  # also waits, so the loop runs at most FPS times a second
         game.update(source.latest(), dt)
         game.draw(canvas)
@@ -133,6 +146,12 @@ def _open_sim() -> SimSceneSource:
         settle_seconds=float(os.environ.get("LORIKEET_SETTLE_SECONDS", "0.2")),
         hidden_seconds=float(os.environ.get("LORIKEET_HIDDEN_SECONDS", "2")),
     )
+
+
+def _piece_colors() -> list[str]:
+    """The colour names set up for this room, in the order `LORIKEET_PIECE_COLORS` lists them."""
+    names = os.environ.get("LORIKEET_PIECE_COLORS", "yellow,pink,green,blue").split(",")
+    return [name.strip() for name in names if name.strip()] or ["yellow"]
 
 
 def _size(text: str) -> tuple[int, int]:
