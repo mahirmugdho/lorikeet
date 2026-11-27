@@ -35,6 +35,9 @@ DEFAULT_EDGE = (105, 101, 96)
 
 TERRAIN = (163, 150, 134)
 EGG, EGG_SPECKLE, EGG_SHINE = (247, 240, 226), (206, 190, 166), (255, 253, 248)
+EGG_RIM = (150, 140, 124)
+"""Projected onto paper, a nearly white egg is just slightly brighter paper, so a darker rim
+keeps its outline visible (on the desk's notes and on real ones)."""
 NEST, NEST_HOLLOW = (150, 122, 92), (118, 94, 70)
 BIRD, BIRD_BELLY, BIRD_WING, BIRD_HEAD = (
     (116, 164, 142),
@@ -109,6 +112,7 @@ class FlatLooks:
         (x, y), r = thing.position, _radius(thing)
         self._circle_shadow(canvas, (x, y), r)
         pygame.draw.circle(canvas, EGG, (x, y), r)
+        pygame.draw.circle(canvas, EGG_RIM, (x, y), r, 3)
         # A speckle that turns with the egg, so you can see it roll...
         turn = thing.angle
         speckle = (x + 0.45 * r * math.cos(turn), y + 0.45 * r * math.sin(turn))

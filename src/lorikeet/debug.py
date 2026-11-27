@@ -38,6 +38,9 @@ class DebugOverlay:
         if event.type == pygame.KEYDOWN and event.key == pygame.K_d:
             self.shown = not self.shown
 
+    def draw_wall(self, wall: pygame.Surface) -> None:
+        pass  # its outlines are projected light, not paper
+
     def draw(self, canvas: pygame.Surface) -> None:
         if not self.shown:
             return

@@ -28,11 +28,21 @@ def renderer(monkeypatch: pytest.MonkeyPatch) -> Iterator[FlatRenderer]:
     pygame.quit()
 
 
+def bare_wall() -> pygame.Surface:
+    wall = pygame.Surface(SIZE)
+    wall.fill((255, 255, 255))
+    return wall
+
+
 def shown(
-    renderer: FlatRenderer, view: View, layer: pygame.Surface | None = None
+    renderer: FlatRenderer,
+    view: View,
+    layer: pygame.Surface | None = None,
+    wall: pygame.Surface | None = None,
 ) -> pygame.Surface:
-    """What the window shows after drawing `view`, with `layer` (empty if not given) on top."""
-    renderer.draw(view, layer or pygame.Surface(SIZE, pygame.SRCALPHA))
+    """What the window shows after drawing `view` on `wall` (bare if not given), with `layer`
+    (empty if not given) on top."""
+    renderer.draw(view, wall or bare_wall(), layer or pygame.Surface(SIZE, pygame.SRCALPHA))
     screen = pygame.display.get_surface()
     assert screen is not None
     return screen
@@ -69,12 +79,28 @@ def test_an_outline_is_turned_by_its_angle(renderer: FlatRenderer):
     assert pixel(screen, 180, 90) == BACKDROP
 
 
-def test_the_overlay_layer_is_laid_on_top(renderer: FlatRenderer):
+def test_the_overlay_layer_is_laid_on_top_of_everything(renderer: FlatRenderer):
     egg = Thing(id=1, kind="egg", shape=Circle(10), position=(100, 90))
     layer = pygame.Surface(SIZE, pygame.SRCALPHA)
     layer.set_at((100, 90), RED)
+    wall = bare_wall()
+    wall.fill((0, 200, 0), pygame.Rect(80, 70, 40, 40))  # paper under the egg
 
-    assert pixel(shown(renderer, View(things=(egg,)), layer), 100, 90) == RED
+    assert pixel(shown(renderer, View(things=(egg,)), layer, wall), 100, 90) == RED
+
+
+def test_the_picture_lands_on_the_wall_like_light_on_paper(renderer: FlatRenderer):
+    # What you see is the projection times the colour of what it lands on: on green paper
+    # the egg is tinted green, as it would be on the real wall.
+    egg = Thing(id=1, kind="egg", shape=Circle(10), position=(100, 90))
+    plain = pixel(shown(renderer, View(things=(egg,))), 100, 90)
+    wall = bare_wall()
+    wall.fill((0, 200, 0), pygame.Rect(80, 70, 40, 40))
+
+    on_paper = pixel(shown(renderer, View(things=(egg,)), wall=wall), 100, 90)
+
+    expected = (0, plain[1] * 200 / 255, 0)
+    assert all(abs(a - b) <= 2 for a, b in zip(on_paper, expected, strict=True))
 
 
 def test_projector_output_explains_a_missing_display(monkeypatch: pytest.MonkeyPatch):
@@ -179,3 +205,13 @@ def test_text_is_written_centred_where_it_is(renderer: FlatRenderer):
     around = pygame.Rect(100, 70, 120, 40)
     assert pygame.transform.average_color(screen, around)[:3] != BACKDROP
     assert pygame.transform.average_color(screen, pygame.Rect(0, 0, 60, 40))[:3] == BACKDROP
+
+
+def test_the_egg_has_a_darker_rim_so_it_shows_up_on_paper(renderer: FlatRenderer):
+    # The picture lands on paper notes like light, so a nearly white egg on a green note is
+    # just slightly brighter green. A darker rim keeps its outline visible.
+    egg = Thing(id=1, kind="egg", shape=Circle(20), position=(160, 90))
+
+    screen = shown(renderer, View(things=(egg,)))
+
+    assert sum(pixel(screen, 179, 90)) < sum(pixel(screen, 160, 90)) - 60

@@ -23,14 +23,16 @@ class FakeRenderer:
     def __init__(self, events: list[pygame.event.Event] | None = None) -> None:
         self._events = list(events or [])
         self.views: list[View] = []
+        self.walls: list[pygame.Surface] = []
         self.layers: list[pygame.Surface] = []
 
     def events(self) -> list[pygame.event.Event]:
         events, self._events = self._events, []
         return events
 
-    def draw(self, view: View, layer: pygame.Surface) -> None:
+    def draw(self, view: View, wall: pygame.Surface, layer: pygame.Surface) -> None:
         self.views.append(view)
+        self.walls.append(wall.copy())
         self.layers.append(layer.copy())
 
     def close(self) -> None:
@@ -52,13 +54,23 @@ class FakeOverlay:
     """Notes the type of every event it's given, and marks SPOT on the layer when drawn,
     for its first `frames` frames."""
 
-    def __init__(self, mark: tuple[int, int, int, int], frames: int = 99) -> None:
+    def __init__(
+        self,
+        mark: tuple[int, int, int, int],
+        frames: int = 99,
+        paper: tuple[int, int, int] | None = None,
+    ) -> None:
         self.mark = mark
         self.frames = frames
+        self.paper = paper  # given, it also puts this colour on the wall at SPOT
         self.events: list[int] = []
 
     def handle(self, event: pygame.event.Event) -> None:
         self.events.append(event.type)
+
+    def draw_wall(self, wall: pygame.Surface) -> None:
+        if self.paper is not None and self.frames > 0:
+            wall.set_at(SPOT, self.paper)
 
     def draw(self, canvas: pygame.Surface) -> None:
         if self.frames > 0:
@@ -161,3 +173,20 @@ def test_escape_stops_before_drawing_anything():
     run(FakeGame(), DeskSceneSource(), renderer, max_frames=5)
 
     assert renderer.views == []
+
+
+def test_overlays_put_their_paper_on_the_wall_the_renderer_gets():
+    renderer = FakeRenderer()
+
+    run(FakeGame(), DeskSceneSource(), renderer, (FakeOverlay(RED, paper=(0, 200, 0)),), 1)
+
+    assert renderer.walls[0].get_at(SPOT)[:3] == (0, 200, 0)
+
+
+def test_the_wall_starts_bare_every_frame():
+    renderer = FakeRenderer()
+    overlay = FakeOverlay(RED, frames=1, paper=(0, 200, 0))
+
+    run(FakeGame(), DeskSceneSource(), renderer, (overlay,), max_frames=2)
+
+    assert renderer.walls[1].get_at(SPOT)[:3] == (255, 255, 255)  # bare wall is white

@@ -64,15 +64,22 @@ class Game(Protocol):
 
 
 class Overlay(Protocol):
-    """Something drawn over the game, which also gets the mouse and keyboard: the desk's
-    notes and palette, or the debug overlay. It draws onto the overlay layer, which is
-    transparent, in projector pixels, and premultiplied: opaque drawing goes on as usual,
-    and anything see-through goes on with `premul_alpha()` and `BLEND_PREMULTIPLIED`. The
-    game never sees overlays: on the wall, notes are the only input."""
+    """Something besides the game on screen, which also gets the mouse and keyboard: the
+    desk, or the debug overlay. The game never sees overlays: on the wall, notes are the
+    only input. Both layers are in projector pixels (see `lorikeet.render`)."""
 
     def handle(self, event: pygame.event.Event) -> None: ...
 
-    def draw(self, canvas: pygame.Surface) -> None: ...
+    def draw_wall(self, wall: pygame.Surface) -> None:
+        """Put on the wall what's physically on it, such as the desk's paper notes. The game's
+        picture lands on top of it. The wall starts white (bare) each frame."""
+        ...
+
+    def draw(self, canvas: pygame.Surface) -> None:
+        """Draw what's in front of the wall onto the overlay layer, which is transparent and
+        premultiplied: opaque drawing goes on as usual, and anything see-through goes on with
+        `premul_alpha()` and `BLEND_PREMULTIPLIED`."""
+        ...
 
 
 class NoGame:
@@ -160,9 +167,11 @@ def run(
     max_frames: int | None = None,
 ) -> None:
     """Each frame: pass the window's input to the overlays, give the game the newest scene,
-    draw the overlays onto a cleared layer, and have the renderer draw the game's view with
-    the layer on top. Stops on Esc or when the window closes, or after `max_frames` (tests).
+    let the overlays draw onto a bare wall and a cleared layer, and have the renderer draw the
+    game's view landing on the wall, with the layer on top. Stops on Esc or when the window
+    closes, or after `max_frames` (tests).
     """
+    wall = pygame.Surface(renderer.size)
     layer = pygame.Surface(renderer.size, pygame.SRCALPHA)
     clock = pygame.time.Clock()
     frames = 0
@@ -176,10 +185,12 @@ def run(
                 overlay.handle(event)
         dt = clock.tick(FPS) / 1000  # also waits, so the loop runs at most FPS times a second
         game.update(source.latest(), dt)
+        wall.fill((255, 255, 255))  # bare wall: the picture shows as it is
         layer.fill((0, 0, 0, 0))  # fully transparent: only what overlays draw shows
         for overlay in overlays:
+            overlay.draw_wall(wall)
             overlay.draw(layer)
-        renderer.draw(game.view(), layer)
+        renderer.draw(game.view(), wall, layer)
         frames += 1
 
 

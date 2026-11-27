@@ -91,7 +91,9 @@ def test_the_renderer_draws_on_paper(monkeypatch: pytest.MonkeyPatch):
     pygame.init()
     try:
         renderer = SketchRenderer("window", SIZE, display=0)
-        renderer.draw(View(), pygame.Surface(SIZE, pygame.SRCALPHA))
+        bare_wall = pygame.Surface(SIZE)
+        bare_wall.fill((255, 255, 255))
+        renderer.draw(View(), bare_wall, pygame.Surface(SIZE, pygame.SRCALPHA))
         screen = pygame.display.get_surface()
         assert screen is not None
         assert pygame.transform.average_color(screen)[:3] == PAPER
