@@ -1,6 +1,7 @@
 """Nest's rules: which notes count, the go spot, laying eggs one at a time, and how each ends.
 
-Each frame the launcher calls `update(scene, dt)` with the newest scene (ADR 0004):
+Each frame the launcher calls `update(scene, dt)` with the newest scene (ADR 0004), then
+`view()`, which describes what to show for whichever renderer is drawing (ADR 0008):
 
 - **Notes.** A note is ground once it's stuck down: SETTLED, or HIDDEN (settled, and
   probably just behind a hand). A note still MOVING is in someone's hand, so the egg goes
@@ -25,7 +26,8 @@ from enum import Enum
 
 from lorikeet.games.nest.level import Level, Spot
 from lorikeet.games.nest.world import EGG_RADIUS, World
-from lorikeet.interface import PieceState, Point, Scene
+from lorikeet.interface import Piece, PieceState, Point, Polygon, Scene
+from lorikeet.view import Circle, Outline, Thing, View
 
 STEP = 1 / 120
 """Seconds per physics step."""
@@ -41,6 +43,15 @@ PROGRESS = 4.0
 """Pixels an egg has to get closer to the blossom to count as progress."""
 
 _PLACED = frozenset({PieceState.SETTLED, PieceState.HIDDEN})
+
+# Thing ids in the View, kept apart so each kind of thing has its own range: renderers rely
+# on an id meaning the same thing from frame to frame.
+_BLOSSOM, _GO, _NEST, _LORI = 1, 2, 3, 4
+_TERRAIN, _EGGS, _NOTES = 100, 1000, 100_000
+
+NEST_RADIUS, LORI_RADIUS = 40.0, 34.0
+LORI_FROM_NEST = (-70.0, -14.0)
+"""Where Lori sits: just left of her nest, facing it."""
 
 
 class State(Enum):
@@ -66,6 +77,7 @@ class NestGame:
         self.outcomes: list[Outcome] = []
         """How each egg so far has ended, oldest first."""
         self._world = World(level)
+        self._ground: tuple[Piece, ...] = ()  # the notes that are ground right now
         self._go_on = False
         self._lag = 0.0  # game time owed, not yet stepped
         self._until_egg = LAY_DELAY
@@ -89,12 +101,63 @@ class NestGame:
         placed = [piece for piece in scene.pieces if piece.state in _PLACED]
         go_notes = {piece.id for piece in placed if _on(self.level.go, piece.center)}
         self._go_on = bool(go_notes)
-        self._world.set_notes(piece for piece in placed if piece.id not in go_notes)
+        self._ground = tuple(piece for piece in placed if piece.id not in go_notes)
+        self._world.set_notes(self._ground)
         self._lag += min(dt, MAX_CATCH_UP)
         # The tiny allowance stops float rounding from dropping a step now and then.
         while self._lag >= STEP - 1e-9:
             self._lag -= STEP
             self._step()
+
+    def view(self) -> View:
+        """What to show: the ground, the go spot, the notes, Lori and her nest, the blossom,
+        and the egg in front. The notes are listed for renderers that want them (a 3D one
+        can cast their shadows); a flat renderer draws nothing for them, because they're
+        real paper on the wall, or the desk's sketched paper."""
+        level, state = self.level, self.state
+        things = [
+            Thing(_TERRAIN + i, "terrain", *_centred(polygon))
+            for i, polygon in enumerate(level.terrain)
+        ]
+        things.append(
+            Thing(
+                _GO, "go", Circle(level.go.radius), level.go.at, pose="on" if self._go_on else "off"
+            )
+        )
+        for piece in self._ground:
+            shape, centre = _centred(piece.outline)
+            things.append(
+                Thing(_NOTES + piece.id, "note", shape, centre, layer=1, pose=piece.state.value)
+            )
+        things.append(Thing(_NEST, "nest", Circle(NEST_RADIUS), level.nest.at, layer=1))
+        won = state is State.WON
+        things.append(
+            Thing(
+                _BLOSSOM,
+                "blossom",
+                Circle(level.blossom.radius),
+                level.blossom.at,
+                layer=1,
+                pose="won" if won else "",
+            )
+        )
+        nest_x, nest_y = level.nest.at
+        lori_pose = "happy" if won else "laying" if state is State.LAYING else "idle"
+        lori_at = (nest_x + LORI_FROM_NEST[0], nest_y + LORI_FROM_NEST[1])
+        things.append(Thing(_LORI, "bird", Circle(LORI_RADIUS), lori_at, layer=2, pose=lori_pose))
+        egg = self._world.egg
+        if egg is not None:
+            things.append(
+                Thing(
+                    _EGGS + len(self.outcomes),  # each egg is a new thing
+                    "egg",
+                    Circle(EGG_RADIUS),
+                    egg,
+                    angle=self._world.egg_angle,
+                    layer=3,
+                )
+            )
+        return View(things=tuple(things))
 
     def _step(self) -> None:
         if self.state is State.WON:
@@ -140,6 +203,13 @@ class NestGame:
             if self._since_progress >= self.level.timeout_s:
                 return Outcome.STALLED
         return None
+
+
+def _centred(polygon: Polygon) -> tuple[Outline, Point]:
+    """`polygon` as an Outline around its own centre, and where that centre is."""
+    cx = sum(x for x, _ in polygon) / len(polygon)
+    cy = sum(y for _, y in polygon) / len(polygon)
+    return Outline(tuple((x - cx, y - cy) for x, y in polygon)), (cx, cy)
 
 
 def _on(spot: Spot, point: Point) -> bool:
