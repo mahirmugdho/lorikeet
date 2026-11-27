@@ -22,14 +22,18 @@ from typing import Protocol
 
 import pygame
 
+from lorikeet.debug import DebugOverlay
 from lorikeet.desk.mouse import DeskMouse
 from lorikeet.desk.overlay import DeskOverlay
 from lorikeet.desk.palette import Palette
 from lorikeet.desk.source import DeskSceneSource
 from lorikeet.interface import Scene, SceneSource
-from lorikeet.viewer import Viewer
 
 FPS = 60
+
+BACKDROP = (232, 230, 226)
+"""A light, nearly grey backdrop: shadows show on it, and it adds almost no colour to real
+notes under the projector, because detection keys on saturation (ADR 0006)."""
 
 
 class Game(Protocol):
@@ -46,13 +50,23 @@ class Game(Protocol):
 
 
 class Overlay(Protocol):
-    """Something an input draws over the game's frame, which also gets the mouse and
-    keyboard: the desk's paper notes and palette. The camera input will have none. The game
-    never sees it: on the wall, notes are the only input."""
+    """Something drawn over the game's frame that also gets the mouse and keyboard: the
+    desk's paper notes and palette, or the debug overlay. The game never sees overlays: on
+    the wall, notes are the only input."""
 
     def handle(self, event: pygame.event.Event) -> None: ...
 
     def draw(self, canvas: pygame.Surface) -> None: ...
+
+
+class Backdrop:
+    """Stands in for a game until there is one: a plain backdrop, and nothing else."""
+
+    def update(self, scene: Scene, dt: float) -> None:
+        pass
+
+    def draw(self, canvas: pygame.Surface) -> None:
+        canvas.fill(BACKDROP)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -65,14 +79,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         canvas = _open_output(args.output, args.size, args.display)
         source = _open_desk()
         palette = Palette(tuple(_piece_colors()), canvas.get_size())
-        overlay = DeskOverlay(source, DeskMouse(source, palette))
+        # Debug goes last, so its outlines and labels sit on top of the desk's paper.
+        overlays = (DeskOverlay(source, DeskMouse(source, palette)), DebugOverlay(source))
         width, height = canvas.get_size()
         print(f"lorikeet: {args.input} -> {args.output}, canvas {width}x{height}")
         print(
             "drag notes from the palette or around the surface, roll the wheel to turn the "
-            "one you hold, right-click peels one off, Tab hides the palette, Esc quits"
+            "one you hold, right-click peels one off, Tab hides the palette, D shows what "
+            "games are told, Esc quits"
         )
-        run(Viewer(), source, canvas, overlay=overlay)
+        run(Backdrop(), source, canvas, overlays=overlays)
     finally:
         pygame.quit()
     return 0
@@ -104,12 +120,12 @@ def run(
     game: Game,
     source: SceneSource,
     canvas: pygame.Surface,
-    overlay: Overlay | None = None,
+    overlays: Sequence[Overlay] = (),
     max_frames: int | None = None,
 ) -> None:
-    """Each frame: handle input, give the game the newest scene, draw it, draw the overlay
-    over it, show it. Stops on Esc or when the window closes, or after `max_frames` (for
-    tests). Mouse positions arrive in canvas pixels, whatever the window's size.
+    """Each frame: handle input, give the game the newest scene, draw it, draw the overlays
+    over it in order, show it. Stops on Esc or when the window closes, or after `max_frames`
+    (for tests). Mouse positions arrive in canvas pixels, whatever the window's size.
     """
     clock = pygame.time.Clock()
     frames = 0
@@ -119,12 +135,12 @@ def run(
                 event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE
             ):
                 return
-            if overlay is not None:
+            for overlay in overlays:
                 overlay.handle(event)
         dt = clock.tick(FPS) / 1000  # also waits, so the loop runs at most FPS times a second
         game.update(source.latest(), dt)
         game.draw(canvas)
-        if overlay is not None:
+        for overlay in overlays:
             overlay.draw(canvas)
         pygame.display.flip()
         frames += 1
