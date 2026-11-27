@@ -66,3 +66,15 @@ def test_games_rule_catches_opencv_and_vision_imports(tmp_path: Path):
     found = forbidden_in_games(imported_names(level, root=tmp_path))
 
     assert found == {"cv2", "lorikeet.detection.find_pieces", "lorikeet.tracking"}
+
+
+def test_games_rule_catches_the_input_and_output_choices(tmp_path: Path):
+    # A game can't tell the camera from the desk, or a projector from a window, so it can't
+    # import the code that makes those choices: the desk, or the launcher that wires it up.
+    world = tmp_path / "lorikeet" / "games" / "nest" / "world.py"
+    world.parent.mkdir(parents=True)
+    world.write_text("from lorikeet.desk.source import DeskSceneSource\nfrom lorikeet import app\n")
+
+    found = forbidden_in_games(imported_names(world, root=tmp_path))
+
+    assert found == {"lorikeet.desk.source.DeskSceneSource", "lorikeet.app"}

@@ -17,7 +17,7 @@
 | --- | --- |
 | Branches | `feat/…`, `fix/…`, `docs/…`, `chore/…`, `refactor/…`, `test/…` |
 | Commits & PR titles | Conventional Commits: `type(scope): summary`. `pr-title.yml` enforces it on PR titles |
-| Scopes | `geometry calibration detection tracking interface puzzle tower-defense ci docs deps` |
+| Scopes | `geometry calibration detection tracking interface desk app puzzle tower-defense ci docs deps` |
 | PR size | One concern, reviewable in ~15 minutes. Split anything bigger |
 | Merging | Squash only. `main` changes only through PRs |
 | Hold a PR | Open it as a draft or add the `no-automerge` label |

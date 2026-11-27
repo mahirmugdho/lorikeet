@@ -25,6 +25,6 @@ jobs:
             echo "OK: $TITLE"
           else
             echo "::error::PR title must look like 'feat(detection): add …'. Got: $TITLE"
-            echo "Types: feat fix chore docs refactor test perf ci build revert. Scopes: geometry calibration detection tracking interface puzzle tower-defense ci docs deps."
+            echo "Types: feat fix chore docs refactor test perf ci build revert. Scopes: geometry calibration detection tracking interface desk app puzzle tower-defense ci docs deps."
             exit 1
           fi
