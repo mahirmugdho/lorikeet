@@ -32,14 +32,18 @@ def made_up(**changes: Any) -> Level:
 
 
 def note(
-    piece_id: int, center: Point, angle: float = 0.0, state: PieceState = PieceState.SETTLED
+    piece_id: int,
+    center: Point,
+    angle: float = 0.0,
+    state: PieceState = PieceState.SETTLED,
+    color: str = "yellow",
 ) -> Piece:
     """A 100 px note, turned `angle` degrees clockwise on screen."""
     x, y = center
     cos, sin = math.cos(math.radians(angle)), math.sin(math.radians(angle))
     corners = ((-50, -50), (50, -50), (50, 50), (-50, 50))
     outline = tuple((x + dx * cos - dy * sin, y + dx * sin + dy * cos) for dx, dy in corners)
-    return Piece(id=piece_id, color="yellow", state=state, outline=outline, parts=(outline,))
+    return Piece(id=piece_id, color=color, state=state, outline=outline, parts=(outline,))
 
 
 def go_note(level: Level, state: PieceState = PieceState.SETTLED) -> Piece:
@@ -186,7 +190,9 @@ def test_the_game_runs_at_the_same_speed_at_any_frame_rate():
 @pytest.mark.parametrize("level_id", level_ids())
 def test_each_levels_stored_solution_wins(level_id: str):
     level = load_level(level_id)
-    notes = tuple(note(i, n.at, n.angle) for i, n in enumerate(level.solution, start=1))
+    notes = tuple(
+        note(i, n.at, n.angle, color=n.color) for i, n in enumerate(level.solution, start=1)
+    )
     game = NestGame(level)
 
     run(game, Scene(time=0.0, pieces=(go_note(level), *notes)), seconds=20)
@@ -290,3 +296,60 @@ def test_that_note_becomes_ground_once_the_egg_is_clear_of_it():
     run(game, scene, seconds=LAY_DELAY + 2)  # the next egg drops onto the note
 
     assert game.egg is not None and game.egg[1] < on_egg.center[1]  # resting on top of it
+
+
+# What each colour does. In the pit, the egg falls straight down from (200, 100); a note
+# under it at (200, 300) spans 250..350.
+UNDER_NEST = (200, 300)
+
+
+def egg_heights(level: Level, *notes: Piece, seconds: float) -> list[float]:
+    """The egg's height (y) at each step, from when it's laid."""
+    game = NestGame(level)
+    scene = Scene(time=0.0, pieces=(go_note(level), *notes))
+    run(game, scene, seconds=LAY_DELAY, dt=1 / 120)
+    heights = []
+    for _ in range(round(seconds * 120)):
+        game.update(scene, 1 / 120)
+        if game.egg is not None:
+            heights.append(game.egg[1])
+    return heights
+
+
+def rebound_top(heights: list[float]) -> float:
+    """How high the egg gets after it first hits the note (smaller y is higher)."""
+    impact = heights.index(max(heights[:120]))
+    return min(heights[impact:])
+
+
+def test_a_pink_note_bounces_the_egg_higher_than_a_yellow_one():
+    level = made_up()
+    yellow = egg_heights(level, note(1, UNDER_NEST), seconds=2)
+    pink = egg_heights(level, note(1, UNDER_NEST, color="pink"), seconds=2)
+
+    assert rebound_top(pink) < rebound_top(yellow) - 30
+
+
+def test_a_green_note_lets_the_egg_through_and_speeds_it_up():
+    level = made_up()
+    plain = egg_heights(level, seconds=0.7)
+    green = egg_heights(level, note(1, UNDER_NEST, color="green"), seconds=0.7)
+
+    assert green[-1] > plain[-1] + 20  # through the note, and further down than with none
+
+
+def test_a_blue_note_lets_the_egg_in_and_slows_it_right_down():
+    level = made_up()
+    plain = egg_heights(level, seconds=0.7)
+    blue = egg_heights(level, note(1, UNDER_NEST, color="blue"), seconds=0.7)
+
+    # In the note (not resting on its top at 222), and far behind a free fall.
+    assert 250 < blue[-1] < 380 < plain[-1]
+
+
+def test_a_note_of_a_colour_without_a_meaning_is_solid():
+    level = made_up()
+
+    heights = egg_heights(level, note(1, UNDER_NEST, color="orange"), seconds=2)
+
+    assert heights[-1] < 250  # resting on top of it

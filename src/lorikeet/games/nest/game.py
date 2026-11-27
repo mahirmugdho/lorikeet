@@ -3,9 +3,11 @@
 Each frame the launcher calls `update(scene, dt)` with the newest scene (ADR 0004), then
 `view()`, which describes what to show for whichever renderer is drawing (ADR 0008):
 
-- **Notes.** A note is ground once it's stuck down: SETTLED, or HIDDEN (settled, and
-  probably just behind a hand). A note still MOVING is in someone's hand, so the egg goes
-  straight through it.
+- **Notes.** A note counts once it's stuck down: SETTLED, or HIDDEN (settled, and probably
+  just behind a hand). A note still MOVING is in someone's hand, so the egg goes straight
+  through it. What a note does depends on its colour (`NOTE_KINDS`): yellow is plain
+  ground, pink is bouncy ground, green is a boost zone and blue a slow zone (the egg passes
+  through zones; see `world.py`). Any other colour is plain ground.
 - **The go spot.** A stuck-down note whose centre is on the go spot starts the eggs. That
   note isn't ground, so it can't change the level it's starting.
 - **Eggs.** One at a time: `LAY_DELAY` after the go note goes on, or after the last egg
@@ -28,7 +30,7 @@ import math
 from enum import Enum
 
 from lorikeet.games.nest.level import Level, Spot
-from lorikeet.games.nest.world import EGG_RADIUS, World
+from lorikeet.games.nest.world import EGG_RADIUS, NoteKind, World
 from lorikeet.interface import Piece, PieceState, Point, Polygon, Scene
 from lorikeet.view import Circle, Outline, Text, Thing, View
 
@@ -46,6 +48,15 @@ PROGRESS = 4.0
 """Pixels an egg has to get closer to the blossom to count as progress."""
 
 _PLACED = frozenset({PieceState.SETTLED, PieceState.HIDDEN})
+
+NOTE_KINDS = {
+    "yellow": NoteKind.SOLID,
+    "pink": NoteKind.BOUNCY,
+    "green": NoteKind.BOOST,
+    "blue": NoteKind.SLOW,
+}
+"""What each note colour does. Colours are names set up per room (LORIKEET_PIECE_COLORS),
+so any other colour is plain ground."""
 
 # Thing ids in the View, kept apart so each kind of thing has its own range: renderers rely
 # on an id meaning the same thing from frame to frame.
@@ -123,7 +134,9 @@ class NestGame:
         go_notes = {piece.id for piece in placed if _on(self.level.go, piece.center)}
         self._go_on = bool(go_notes)
         self._ground = tuple(piece for piece in placed if piece.id not in go_notes)
-        self._world.set_notes(self._ground)
+        self._world.set_notes(
+            (piece, NOTE_KINDS.get(piece.color, NoteKind.SOLID)) for piece in self._ground
+        )
         self._lag += min(dt, MAX_CATCH_UP)
         # The tiny allowance stops float rounding from dropping a step now and then.
         while self._lag >= STEP - 1e-9:
