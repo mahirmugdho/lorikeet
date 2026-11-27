@@ -41,3 +41,12 @@ def test_ids_must_be_unique_in_a_view():
 
     with pytest.raises(ValueError, match="repeated: \\[1\\]"):
         View(things=(egg, egg))
+
+
+def test_back_to_front_orders_by_layer_and_keeps_order_within_a_layer():
+    def thing(i: int, layer: int) -> Thing:
+        return Thing(id=i, kind="terrain", shape=Circle(1), layer=layer)
+
+    view = View(things=(thing(1, 2), thing(2, 0), thing(3, 2), thing(4, 1)))
+
+    assert [t.id for t in view.back_to_front()] == [2, 4, 1, 3]

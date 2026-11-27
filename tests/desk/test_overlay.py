@@ -1,6 +1,7 @@
 """The desk's overlay: notes sketched as paper over the game's frame, the palette, and the
 mouse."""
 
+import numpy as np
 import pygame
 import pytest
 
@@ -143,3 +144,37 @@ def test_the_hint_goes_once_a_note_is_on_the_desk(desk: DeskSceneSource, overlay
     desk.drop("pink", (300, 200))
 
     assert band_is_empty(drawn(overlay))
+
+
+def layered(overlay: DeskOverlay, ground: tuple[int, int, int]) -> pygame.Surface:
+    """Drawn the way renderers show it: onto a clear layer, then laid over the frame with
+    premultiplied blending (ADR 0008)."""
+    layer = pygame.Surface(SIZE, pygame.SRCALPHA)
+    overlay.draw(layer)
+    frame = pygame.Surface(SIZE)
+    frame.fill(ground)
+    frame.blit(layer, (0, 0), special_flags=pygame.BLEND_PREMULTIPLIED)
+    return frame
+
+
+def largest_difference(a: pygame.Surface, b: pygame.Surface) -> int:
+    pixels_a = pygame.surfarray.array3d(a).astype(int)
+    pixels_b = pygame.surfarray.array3d(b).astype(int)
+    return int(np.abs(pixels_a - pixels_b).max())
+
+
+def test_on_a_clear_layer_it_looks_the_same_as_drawn_straight_onto_the_frame(
+    desk: DeskSceneSource, overlay: DeskOverlay
+):
+    # Every renderer lays the overlay layer over its own frame, so drawing onto a clear
+    # layer has to look like drawing straight onto the frame. The held note is the hard case:
+    # it's see-through, over its own see-through shadow.
+    desk.drop("pink", (300, 200))
+    overlay.handle(press((600, 300)))
+
+    assert largest_difference(drawn(overlay, LIGHT), layered(overlay, LIGHT)) <= 2
+
+
+def test_the_hint_looks_the_same_on_a_clear_layer(overlay: DeskOverlay):
+    # The text's soft edges are see-through too.
+    assert largest_difference(drawn(overlay, LIGHT), layered(overlay, LIGHT)) <= 2

@@ -41,6 +41,17 @@ def forbidden_in_games(names: set[str]) -> set[str]:
     }
 
 
+def forbidden_in_renderers(names: set[str]) -> set[str]:
+    """Renderers draw any game's View, so from Lorikeet they import only the view, the
+    interface's point types, and other renderers: never a game, the desk or the launcher."""
+    allowed = ("lorikeet.view", "lorikeet.interface", "lorikeet.render")
+    return {
+        name
+        for name in names
+        if _within(name, "lorikeet") and not any(_within(name, ok) for ok in allowed)
+    }
+
+
 def test_interface_imports_only_the_standard_library():
     names = imported_names(SRC / "lorikeet" / "interface.py")
 
@@ -93,3 +104,28 @@ def test_games_rule_catches_the_input_and_output_choices(tmp_path: Path):
 def test_a_game_may_import_the_view():
     # A game describes what it shows as a View, so it needs the format, never a renderer.
     assert forbidden_in_games({"lorikeet.view.View", "lorikeet.view.Thing"}) == set()
+
+
+def test_renderers_import_only_the_view():
+    for path in (SRC / "lorikeet" / "render").rglob("*.py"):
+        assert forbidden_in_renderers(imported_names(path)) == set(), path
+
+
+def test_renderers_rule_catches_games_overlays_and_the_launcher(tmp_path: Path):
+    clay = tmp_path / "lorikeet" / "render" / "clay.py"
+    clay.parent.mkdir(parents=True)
+    clay.write_text(
+        "from lorikeet.games.nest import Nest\n"
+        "from lorikeet.desk.overlay import DeskOverlay\n"
+        "from lorikeet import app\n"
+        "from lorikeet.view import View\n"
+        "from .flat import BACKDROP\n"
+    )
+
+    found = forbidden_in_renderers(imported_names(clay, root=tmp_path))
+
+    assert found == {
+        "lorikeet.games.nest.Nest",
+        "lorikeet.desk.overlay.DeskOverlay",
+        "lorikeet.app",
+    }

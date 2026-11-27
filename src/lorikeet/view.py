@@ -87,3 +87,8 @@ class View:
         repeated = sorted({i for i in ids if ids.count(i) > 1})
         if repeated:
             raise ValueError(f"thing ids must be unique in a view, repeated: {repeated}")
+
+    def back_to_front(self) -> list[Thing]:
+        """The things in the order to draw them: by layer, and within a layer in the order
+        the game listed them (Python's sort keeps ties in order)."""
+        return sorted(self.things, key=lambda thing: thing.layer)

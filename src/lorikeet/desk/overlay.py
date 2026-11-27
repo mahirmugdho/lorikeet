@@ -124,8 +124,8 @@ class DeskOverlay:
         height = math.ceil(max(y for _, y in outline)) - top + margin + 1
         layer = pygame.Surface((width, height), pygame.SRCALPHA)
         _paper(layer, color, tuple((x - left, y - top) for x, y in outline), rng)
-        layer.set_alpha(alpha)
-        canvas.blit(layer, (left, top))
+        layer.fill((255, 255, 255, alpha), special_flags=pygame.BLEND_RGBA_MULT)
+        _lay_over(canvas, layer, (left, top))
 
     def _palette(self, canvas: pygame.Surface, frame: int) -> None:
         palette = self._mouse.palette
@@ -149,7 +149,20 @@ class DeskOverlay:
         text = self._font.render(HINT, True, PENCIL)
         text = pygame.transform.rotate(text, seeded(_HINT, frame).uniform(-1.2, 1.2))
         _, top, _, _ = self._mouse.palette.bar()
-        canvas.blit(text, text.get_rect(center=(canvas.get_width() / 2, top - 40)))
+        _lay_over(canvas, text, text.get_rect(center=(canvas.get_width() / 2, top - 40)).topleft)
+
+
+def _lay_over(canvas: pygame.Surface, image: pygame.Surface, topleft: tuple[int, int]) -> None:
+    """Lay a see-through image on the canvas with premultiplied alpha.
+
+    The canvas is often the clear overlay layer that renderers lay over their frame (ADR
+    0008), and something see-through can land on something else see-through there, like the
+    held note on its own shadow. pygame's ordinary blend gets that case wrong (it comes out
+    darker), but premultiplied blending (src + dst * (1 - src alpha)) is right on a clear
+    layer and on an opaque canvas alike. Opaque drawing and the black shadows need nothing
+    special: they're already the same in premultiplied form.
+    """
+    canvas.blit(image.premul_alpha(), topleft, special_flags=pygame.BLEND_PREMULTIPLIED)
 
 
 def _paper(surface: pygame.Surface, color: str, outline: Polygon, rng: random.Random) -> None:
