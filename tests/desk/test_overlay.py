@@ -13,6 +13,7 @@ from lorikeet.desk.source import DeskSceneSource
 SIZE = (1000, 600)
 PALETTE = Palette(("yellow", "pink"), canvas_size=SIZE)
 YELLOW_SWATCH = PALETTE.swatches()[0][1]
+WHITE = (255, 255, 255)
 HINT_BAND = pygame.Rect(0, 430, 1000, 60)  # just above the palette bar, whose top is at y=500
 LIGHT = (200, 200, 200)
 
@@ -39,6 +40,14 @@ def drawn(overlay: DeskOverlay, ground: tuple[int, int, int] = (0, 0, 0)) -> pyg
     return canvas
 
 
+def on_wall(overlay: DeskOverlay) -> pygame.Surface:
+    """What the desk puts on the wall: white where it's bare, paper where notes are."""
+    wall = pygame.Surface(SIZE)
+    wall.fill(WHITE)
+    overlay.draw_wall(wall)
+    return wall
+
+
 def band_is_empty(canvas: pygame.Surface) -> bool:
     return pygame.transform.average_color(canvas, HINT_BAND)[:3] == (0, 0, 0)
 
@@ -53,7 +62,17 @@ def test_a_note_on_the_surface_is_drawn_as_paper_of_its_colour(
 ):
     desk.drop("pink", (300, 200))
 
-    assert pixel(drawn(overlay), (300, 200)) == PAPER["pink"]
+    assert pixel(on_wall(overlay), (300, 200)) == PAPER["pink"]
+
+
+def test_stuck_down_notes_are_on_the_wall_not_on_top_of_the_game(
+    desk: DeskSceneSource, overlay: DeskOverlay
+):
+    # On top they'd hide the egg passing through a zone note; on the wall, the game's
+    # picture lands on them like projected light on paper.
+    desk.drop("pink", (300, 200))
+
+    assert pixel(drawn(overlay), (300, 200)) == (0, 0, 0)
 
 
 def test_a_peeled_note_is_not_drawn_while_it_waits_out_the_grace_period(
@@ -63,7 +82,7 @@ def test_a_peeled_note_is_not_drawn_while_it_waits_out_the_grace_period(
     now[0] = 1.0
     desk.pick_up(note)  # HIDDEN to games, but no longer on the surface
 
-    assert pixel(drawn(overlay), (300, 200)) != PAPER["pink"]
+    assert pixel(on_wall(overlay), (300, 200)) == WHITE
 
 
 def test_the_palette_shows_a_swatch_of_each_colour(overlay: DeskOverlay):
@@ -113,27 +132,27 @@ def test_the_wheel_turns_the_held_note(desk: DeskSceneSource, overlay: DeskOverl
 def test_a_note_casts_a_soft_shadow_below_it(desk: DeskSceneSource, overlay: DeskOverlay):
     desk.drop("pink", (300, 200))  # its bottom edge is at y=250
 
-    assert sum(pixel(drawn(overlay, LIGHT), (300, 258))) < sum(LIGHT)
+    assert sum(pixel(on_wall(overlay), (300, 258))) < sum(WHITE)
 
 
 def test_the_lines_hold_still_within_a_boil_frame(
     desk: DeskSceneSource, overlay: DeskOverlay, now: list[float]
 ):
     desk.drop("pink", (300, 200))
-    first = pygame.image.tobytes(drawn(overlay), "RGB")
+    first = pygame.image.tobytes(on_wall(overlay), "RGB")
     now[0] = 0.05  # still the first tenth of a second
 
-    assert pygame.image.tobytes(drawn(overlay), "RGB") == first
+    assert pygame.image.tobytes(on_wall(overlay), "RGB") == first
 
 
 def test_the_lines_are_redrawn_on_the_next_boil_frame(
     desk: DeskSceneSource, overlay: DeskOverlay, now: list[float]
 ):
     desk.drop("pink", (300, 200))
-    first = pygame.image.tobytes(drawn(overlay), "RGB")
+    first = pygame.image.tobytes(on_wall(overlay), "RGB")
     now[0] = 0.1  # the next tenth of a second
 
-    assert pygame.image.tobytes(drawn(overlay), "RGB") != first
+    assert pygame.image.tobytes(on_wall(overlay), "RGB") != first
 
 
 def test_an_empty_desk_shows_how_to_start(overlay: DeskOverlay):

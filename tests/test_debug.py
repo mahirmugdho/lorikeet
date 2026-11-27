@@ -77,3 +77,15 @@ def test_on_a_clear_layer_it_looks_the_same_as_drawn_straight_onto_the_frame():
         framed
     ).astype(int)
     assert int(np.abs(difference).max()) <= 2
+
+
+def test_it_puts_nothing_on_the_wall():
+    # Its outlines are projected light, not paper.
+    overlay = DebugOverlay(FakeSceneSource([Scene(time=0.0, pieces=(note(PieceState.SETTLED),))]))
+    overlay.handle(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_d))
+    wall = pygame.Surface((400, 300))
+    wall.fill((255, 255, 255))
+
+    overlay.draw_wall(wall)
+
+    assert pygame.transform.average_color(wall)[:3] == (255, 255, 255)
