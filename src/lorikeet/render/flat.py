@@ -9,7 +9,8 @@ It asks each system for the display's own pixels, so the desktop doesn't stretch
 calibration measures wherever the canvas lands, but a stretched picture is softer and costs
 more pixels to draw.
 
-What each kind of thing looks like is in `flat_looks`.
+What each kind of thing looks like comes from a set of looks: `flat_looks` by default. The
+sketch renderer is this same window with pencil looks (`sketch`).
 """
 
 from __future__ import annotations
@@ -17,21 +18,32 @@ from __future__ import annotations
 import os
 import sys
 from collections.abc import Mapping, Sequence
+from typing import Protocol
 
 import pygame
 
+from lorikeet.render.flat_looks import BACKDROP as BACKDROP  # where it's defined
 from lorikeet.render.flat_looks import FlatLooks
-from lorikeet.view import View
+from lorikeet.view import Thing, View
 
-BACKDROP = (232, 230, 226)
-"""A light, nearly grey backdrop: shadows show on it, and it adds almost no colour to real
-notes under the projector, because detection keys on saturation (ADR 0006)."""
+
+class Looks(Protocol):
+    """What each kind of thing looks like, for a pygame window: a background colour, and a
+    way to draw one thing."""
+
+    @property
+    def backdrop(self) -> tuple[int, int, int]: ...
+
+    def draw(self, canvas: pygame.Surface, thing: Thing) -> None: ...
 
 
 class FlatRenderer:
-    def __init__(self, output: str, size: tuple[int, int], display: int) -> None:
+    def __init__(
+        self, output: str, size: tuple[int, int], display: int, looks: Looks | None = None
+    ) -> None:
         """Open the window: `output` is "window" (a `size` canvas in a window on this
-        screen) or "projector" (fullscreen on display number `display`)."""
+        screen) or "projector" (fullscreen on display number `display`). `looks` draws
+        each thing (flat looks unless given)."""
         # By default SDL minimises a fullscreen window when it loses focus, so clicking on
         # the laptop screen would make the projector go blank.
         os.environ.setdefault("SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS", "0")
@@ -47,7 +59,7 @@ class FlatRenderer:
             pygame.display.init()
         pygame.display.set_caption("Lorikeet")
         self._canvas = _open_projector(display) if output == "projector" else _open_window(size)
-        self._looks = FlatLooks()
+        self._looks: Looks = looks if looks is not None else FlatLooks()
 
     @property
     def size(self) -> tuple[int, int]:
@@ -57,7 +69,7 @@ class FlatRenderer:
         return pygame.event.get()
 
     def draw(self, view: View, layer: pygame.Surface) -> None:
-        self._canvas.fill(BACKDROP)
+        self._canvas.fill(self._looks.backdrop)
         for thing in view.back_to_front():
             self._looks.draw(self._canvas, thing)
         # The overlays, laid on top as they are. The layer is premultiplied (see Renderer).

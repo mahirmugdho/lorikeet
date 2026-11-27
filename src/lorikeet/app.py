@@ -2,7 +2,8 @@
 
 - game: what's played. `nest` (the default), or `none` for an empty desk.
 - input: where scenes come from. `desk` for now; `camera` arrives with detection.
-- renderer: how the game's `View` is drawn. `flat` for now; more later (ADR 0008).
+- renderer: how the game's `View` is drawn (ADR 0008): `sketch` (pencil on paper, the
+  default at the desk) or `flat` (the default otherwise); more later.
 - output: where the renderer's window goes. `window` on this screen, or `projector`.
 
 The game in the middle sees only `Scene`s, and only describes what it shows as a `View`, so
@@ -35,11 +36,15 @@ from lorikeet.games.nest.level import level_ids, load_level
 from lorikeet.interface import Scene, SceneSource
 from lorikeet.render import Renderer
 from lorikeet.render.flat import FlatRenderer
+from lorikeet.render.sketch import SketchRenderer
 from lorikeet.view import View
 
 FPS = 60
 
-RENDERERS: dict[str, Callable[[str, tuple[int, int], int], Renderer]] = {"flat": FlatRenderer}
+RENDERERS: dict[str, Callable[[str, tuple[int, int], int], Renderer]] = {
+    "flat": FlatRenderer,
+    "sketch": SketchRenderer,
+}
 """Each renderer by name: given the output, the window's canvas size and the projector's
 display index, it opens its window."""
 
@@ -122,7 +127,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--input", choices=["desk"], default="desk", help="where notes come from")
     parser.add_argument(
-        "--renderer", choices=sorted(RENDERERS), default="flat", help="how the game is drawn"
+        "--renderer",
+        choices=sorted(RENDERERS),
+        help="how the game is drawn (default: sketch at the desk, flat otherwise)",
     )
     parser.add_argument("--output", choices=["window", "projector"], default="window")
     parser.add_argument(
@@ -138,7 +145,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=int(os.environ.get("LORIKEET_DISPLAY_INDEX", "1")),
         help="the projector's display index (default: LORIKEET_DISPLAY_INDEX, or 1)",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.renderer is None:
+        # Desk play is a sketch, like the desk's own notes; the wall gets the flat look.
+        args.renderer = "sketch" if args.input == "desk" else "flat"
+    return args
 
 
 def run(

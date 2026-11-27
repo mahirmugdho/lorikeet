@@ -25,6 +25,10 @@ import pygame
 from lorikeet.interface import Point
 from lorikeet.view import Circle, Outline, Text, Thing
 
+BACKDROP = (232, 230, 226)
+"""A light, nearly grey backdrop: shadows show on it, and it adds almost no colour to real
+notes under the projector, because detection keys on saturation (ADR 0006)."""
+
 DEFAULT_FILL = (150, 146, 140)
 DEFAULT_EDGE = (105, 101, 96)
 """The plain look for kinds without one of their own."""
@@ -60,6 +64,8 @@ Look = Callable[[pygame.Surface, Thing], None]
 
 
 class FlatLooks:
+    backdrop = BACKDROP
+
     def __init__(self) -> None:
         pygame.font.init()
         self._font = pygame.font.Font(None, 30)  # None picks the font pygame ships with

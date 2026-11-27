@@ -66,15 +66,20 @@ class FakeOverlay:
             self.frames -= 1
 
 
-def test_defaults_are_the_desk_in_a_1920x1080_window_drawn_flat():
+def test_defaults_are_the_desk_in_a_1920x1080_window_drawn_in_sketch():
+    # Desk play gets the sketch renderer, so the game looks hand-drawn like the desk's notes.
     args = parse_args([])
 
     assert (args.input, args.output, args.renderer, args.size) == (
         "desk",
         "window",
-        "flat",
+        "sketch",
         (1920, 1080),
     )
+
+
+def test_the_renderer_can_still_be_chosen():
+    assert parse_args(["--renderer", "flat"]).renderer == "flat"
 
 
 def test_the_default_game_is_nest_from_its_first_level():
