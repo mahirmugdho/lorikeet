@@ -20,7 +20,9 @@ CI has no camera and no display, so everything below runs headless.
 | Tracking _(Phase 2)_ | Timed sequences of detections: ids stay stable, a piece hidden for less than `LORIKEET_HIDDEN_SECONDS` survives, a moved piece gets a new id | `tests/test_tracking.py` |
 | Interface _(Phase 1)_ | Pieces reject bad shapes; `changes()` reports placed and removed for each state change; `FakeSceneSource` plays scripted scenes | `tests/test_interface.py` |
 | Games _(Phase 3–4)_ | Scripted scenes, then assert game rules (ball reaches goal, tower built on placed) | `tests/games/` |
-| Boundary | `interface.py` imports only the standard library; nothing under `games/` imports `cv2` or vision modules | `tests/test_boundaries.py` |
+| Desk | A fake clock drives desk notes through tracking's rules (settle, hidden grace, new id when moved); mouse drags, the palette and the sketch overlay (including the boil's timing) are checked on plain surfaces | `tests/desk/` |
+| Launcher and debug overlay | The headless SDL driver runs a few frames: the game gets the source's scenes, overlays get every event and draw over the game in order; the debug overlay draws only edges, and only after D | `tests/test_app.py`, `tests/test_debug.py` |
+| Boundary | `interface.py` imports only the standard library; nothing under `games/` imports `cv2`, vision modules, the desk or the launcher | `tests/test_boundaries.py` |
 | On hardware | By hand: photo or clip attached to the PR | PR template |
 
 Tests that touch pygame set `SDL_VIDEODRIVER=dummy`. Nothing in the test suite opens a camera.

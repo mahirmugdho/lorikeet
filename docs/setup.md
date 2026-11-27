@@ -16,6 +16,14 @@ Clone into `~/code/`, **not** `~/Documents/` or `~/Desktop/`. If iCloud "Desktop
 
 Editor: VS Code with the Python and Ruff extensions. Point the interpreter at `.venv/bin/python`.
 
+## Play at your desk (no hardware)
+
+```bash
+uv run lorikeet
+```
+
+Desk play needs no projector or camera. Drag a note from the pad at the bottom onto the desk, drag placed notes to move them, roll the wheel to turn the one you hold, and right-click to peel one off. Tab hides the pad, D shows what games are told about each note, Esc quits. With a projector plugged in, `uv run lorikeet --output projector` shows the same thing on the wall.
+
 ## Hardware _(from Phase 1)_
 
 Parts are in [BUY.md](BUY.md). Room setup:
