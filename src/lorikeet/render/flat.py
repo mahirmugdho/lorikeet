@@ -58,15 +58,22 @@ class FlatRenderer:
             del os.environ["SDL_VIDEODRIVER"]  # this SDL can't use Wayland: use its default
             pygame.display.init()
         pygame.display.set_caption("Lorikeet")
-        self._canvas = _open_projector(display) if output == "projector" else _open_window(size)
+        # Events from this window name its Window object: the one made to go fullscreen on
+        # the projector, or None in a plain window, which has no Window object.
+        self._window: pygame.Window | None = None
+        if output == "projector":
+            self._canvas, self._window = _open_projector(display)
+        else:
+            self._canvas = _open_window(size)
         self._looks: Looks = looks if looks is not None else FlatLooks()
 
     @property
     def size(self) -> tuple[int, int]:
         return self._canvas.get_size()
 
-    def events(self) -> list[pygame.event.Event]:
-        return pygame.event.get()
+    def events(self, pending: Sequence[pygame.event.Event]) -> list[pygame.event.Event]:
+        """This window's input, and input that belongs to no window (quitting)."""
+        return [e for e in pending if getattr(e, "window", None) in (None, self._window)]
 
     def draw(self, view: View, wall: pygame.Surface, layer: pygame.Surface) -> None:
         self._canvas.fill(self._looks.backdrop)
@@ -124,7 +131,7 @@ def _open_window(size: tuple[int, int]) -> pygame.Surface:
     return pygame.display.set_mode(size, pygame.SCALED | pygame.RESIZABLE)
 
 
-def _open_projector(display: int) -> pygame.Surface:
+def _open_projector(display: int) -> tuple[pygame.Surface, pygame.Window]:
     sizes = pygame.display.get_desktop_sizes()
     if display >= len(sizes):
         raise SystemExit(
@@ -138,8 +145,9 @@ def _open_projector(display: int) -> pygame.Surface:
     pygame.display.set_mode(sizes[display], display=display)
     # Fullscreen at the desktop's own resolution, so one canvas pixel is one projector pixel.
     # The other kind (desktop=False) changes the video mode, which can rescale the picture.
-    pygame.Window.from_display_module().set_fullscreen(desktop=True)
+    window = pygame.Window.from_display_module()
+    window.set_fullscreen(desktop=True)
     canvas = pygame.display.get_surface()  # fetched again, as going fullscreen can replace it
     if canvas is None:
         raise SystemExit("lorikeet: the projector window closed as it went fullscreen")
-    return canvas
+    return canvas, window

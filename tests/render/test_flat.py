@@ -228,3 +228,10 @@ def test_the_egg_has_a_darker_rim_so_it_shows_up_on_paper(renderer: FlatRenderer
     screen = shown(renderer, View(things=(egg,)))
 
     assert sum(pixel(screen, 179, 90)) < sum(pixel(screen, 160, 90)) - 60
+
+
+def test_the_game_window_takes_its_own_input_and_leaves_the_desks(renderer: FlatRenderer):
+    mine = pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=(10, 10), button=1, window=None)
+    desks = pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=(10, 10), button=1, window="desk")
+
+    assert renderer.events([mine, desks]) == [mine]

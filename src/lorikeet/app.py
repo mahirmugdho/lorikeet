@@ -2,9 +2,14 @@
 
 - game: what's played. `nest` (the default), or `none` for an empty desk.
 - input: where scenes come from. `desk` for now; `camera` arrives with detection.
-- renderer: how the game's `View` is drawn (ADR 0008): `sketch` (pencil on paper, the
-  default at the desk) or `flat` (the default otherwise); more later.
-- output: where the renderer's window goes. `window` on this screen, or `projector`.
+- renderer: how the game window draws the game's `View` (ADR 0008): `flat` (the default)
+  or `sketch` (pencil on paper); more later.
+- output: where the game window goes. `window` on this screen, or `projector`.
+
+The game window is the projection: it shows only what would be projected, whatever the
+input. With the desk as input, a second window opens, the desk window, which shows the same
+game in pencil with the desk's paper notes and palette. That's where the mouse goes. Without
+a projector, both windows sit side by side on this screen.
 
 The game in the middle sees only `Scene`s, and only describes what it shows as a `View`, so
 it can't tell which input, renderer or output it's running with (ADR 0004, ADR 0008). The
@@ -22,6 +27,7 @@ import argparse
 import os
 import sys
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from typing import Protocol
 
 import pygame
@@ -31,6 +37,7 @@ from lorikeet.desk.mouse import DeskMouse
 from lorikeet.desk.overlay import DeskOverlay
 from lorikeet.desk.palette import Palette
 from lorikeet.desk.source import DeskSceneSource
+from lorikeet.desk.window import DeskWindow
 from lorikeet.games.nest.game import NestGame
 from lorikeet.games.nest.level import level_ids, load_level
 from lorikeet.interface import Scene, SceneSource
@@ -82,6 +89,15 @@ class Overlay(Protocol):
         ...
 
 
+@dataclass
+class Screen:
+    """One window: the renderer that owns it, and the overlays drawn on it and handed its
+    input."""
+
+    renderer: Renderer
+    overlays: Sequence[Overlay] = ()
+
+
 class NoGame:
     """Stands in for a game until there is one: it shows nothing."""
 
@@ -97,27 +113,34 @@ def main(argv: Sequence[str] | None = None) -> int:
     pygame.init()  # the overlays draw with pygame, whichever renderer draws the game
     try:
         renderer = RENDERERS[args.renderer](args.output, args.size, args.display)
+        screens = [Screen(renderer)]  # what to close, should anything below fail
         try:
             game = _open_game(args.game, args.level, renderer.size)
             source = _open_desk()
             palette = Palette(tuple(_piece_colors()), renderer.size)
-            # Debug goes last, so its outlines and labels sit on top of the desk's paper.
-            overlays = (DeskOverlay(source, DeskMouse(source, palette)), DebugOverlay(source))
+            desk = DeskOverlay(source, DeskMouse(source, palette))
+            screens = [
+                # The debug overlay shows, on the projection, what the game is told.
+                Screen(renderer, (DebugOverlay(source),)),
+                Screen(DeskWindow(renderer.size), (desk,)),
+            ]
             width, height = renderer.size
             print(
                 f"lorikeet: {args.game} ({args.level}), {args.input} -> {args.renderer} "
                 f"{args.output}, {width}x{height}"
             )
             print(
-                "drag notes from the palette or around the surface, roll the wheel to turn "
-                "the one you hold, right-click peels one off, Tab hides the palette, D shows "
-                "what games are told, Esc quits"
+                "in the desk window: drag notes from the palette or around the surface, roll "
+                "the wheel to turn the one you hold, right-click peels one off, Tab hides the "
+                "palette. In the game window: D shows what games are told. Esc quits"
             )
             if args.game == "nest":
                 print("stick a note on the go spot to start the eggs")
-            run(game, source, renderer, overlays)
+            run(game, source, screens)
         finally:
-            renderer.close()
+            # The desk window first: the game window's close shuts pygame's display down.
+            for screen in reversed(screens):
+                screen.renderer.close()
     finally:
         pygame.quit()
     return 0
@@ -136,7 +159,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--renderer",
         choices=sorted(RENDERERS),
-        help="how the game is drawn (default: sketch at the desk, flat otherwise)",
+        default="flat",
+        help="how the game window draws the game (default: flat)",
     )
     parser.add_argument("--output", choices=["window", "projector"], default="window")
     parser.add_argument(
@@ -152,46 +176,52 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=int(os.environ.get("LORIKEET_DISPLAY_INDEX", "1")),
         help="the projector's display index (default: LORIKEET_DISPLAY_INDEX, or 1)",
     )
-    args = parser.parse_args(argv)
-    if args.renderer is None:
-        # Desk play is a sketch, like the desk's own notes; the wall gets the flat look.
-        args.renderer = "sketch" if args.input == "desk" else "flat"
-    return args
+    return parser.parse_args(argv)
 
 
 def run(
     game: Game,
     source: SceneSource,
-    renderer: Renderer,
-    overlays: Sequence[Overlay] = (),
+    screens: Sequence[Screen],
     max_frames: int | None = None,
+    poll: Callable[[], Sequence[pygame.event.Event]] = pygame.event.get,
 ) -> None:
-    """Each frame: pass the window's input to the overlays, give the game the newest scene,
-    let the overlays draw onto a bare wall and a cleared layer, and have the renderer draw the
-    game's view landing on the wall, with the layer on top. Stops on Esc or when the window
-    closes, or after `max_frames` (tests).
+    """Each frame: read the input once (`poll`) and hand each window's overlays that window's
+    events, give the game the newest scene, then for each window, let its overlays draw onto a
+    bare wall and a cleared layer, and have its renderer draw the game's view landing on the
+    wall, with the layer on top. Every window shows the same view. Stops on Esc in any window
+    or when any window closes, or after `max_frames` (tests).
     """
-    wall = pygame.Surface(renderer.size)
-    layer = pygame.Surface(renderer.size, pygame.SRCALPHA)
+    walls = [pygame.Surface(screen.renderer.size) for screen in screens]
+    layers = [pygame.Surface(screen.renderer.size, pygame.SRCALPHA) for screen in screens]
     clock = pygame.time.Clock()
     frames = 0
     while max_frames is None or frames < max_frames:
-        for event in renderer.events():
-            if event.type == pygame.QUIT or (
-                event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE
-            ):
-                return
-            for overlay in overlays:
-                overlay.handle(event)
+        pending = list(poll())
+        if any(_quits(event) for event in pending):
+            return
+        for screen in screens:
+            for event in screen.renderer.events(pending):
+                for overlay in screen.overlays:
+                    overlay.handle(event)
         dt = clock.tick(FPS) / 1000  # also waits, so the loop runs at most FPS times a second
         game.update(source.latest(), dt)
-        wall.fill((255, 255, 255))  # bare wall: the picture shows as it is
-        layer.fill((0, 0, 0, 0))  # fully transparent: only what overlays draw shows
-        for overlay in overlays:
-            overlay.draw_wall(wall)
-            overlay.draw(layer)
-        renderer.draw(game.view(), wall, layer)
+        view = game.view()
+        for screen, wall, layer in zip(screens, walls, layers, strict=True):
+            wall.fill((255, 255, 255))  # bare wall: the picture shows as it is
+            layer.fill((0, 0, 0, 0))  # fully transparent: only what overlays draw shows
+            for overlay in screen.overlays:
+                overlay.draw_wall(wall)
+                overlay.draw(layer)
+            screen.renderer.draw(view, wall, layer)
         frames += 1
+
+
+def _quits(event: pygame.event.Event) -> bool:
+    """Esc in any window, or closing any window, ends the run."""
+    return event.type in (pygame.QUIT, pygame.WINDOWCLOSE) or (
+        event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE
+    )
 
 
 def _open_game(name: str, level_id: str, canvas: tuple[int, int]) -> Game:
