@@ -18,7 +18,7 @@ Lorikeet turns a projector, a webcam, and sticky notes into physical play surfac
 | `make test` | Tests only (`uv run pytest -q`; add `-k name` for one) |
 | `make lint` | ruff + pyright |
 | `make fmt` | Format and apply safe lint fixes |
-| `uv run lorikeet` | Run Lorikeet. For now: desk input (drag notes with the mouse), drawn by the flat renderer, in a window; `--output projector` fills the projector. `--help` lists the options |
+| `uv run lorikeet` | Play Nest at the desk (drag notes with the mouse), drawn by the flat renderer, in a window; `--output projector` fills the projector, `--level` picks a level, `--game none` gives an empty desk. `--help` lists the options |
 | `uv run --env-file .env lorikeet` | The same, with your `.env` settings (colours, note size, projector display) |
 | `uv run lorikeet calibrate` | Recalibrate camera → projector _(after Phase 1)_ |
 
@@ -37,6 +37,7 @@ src/lorikeet/
   app.py             launcher: input + renderer + output -> a game; only it knows them
   desk/              desk input: drag notes on screen, no camera or projector
   debug.py           debug overlay (press D): what games are told about each piece
+  games/nest/        Nest: notes route Lori's eggs to the blossom; levels in levels/*.json
   games/puzzle/      physics puzzle: pieces as bodies    (Phase 3)
   games/tower_defense/  pieces as selections             (Phase 4)
 tests/               pytest; mirrors src/, plus fixtures/ (no people in images)
@@ -61,7 +62,7 @@ docs/                product/, adr/, security/, legal/, ROADMAP, setup, workflow
 - **Plan before multi-file changes.** Write the plan (superpowers:writing-plans) and get a nod before editing.
 - **Tests first for logic**: geometry, detection on fixture images, tracking, game rules.
 - **Small PRs, one concern each**, reviewable in about 15 minutes. Squash-merged.
-- **Conventional Commits.** Scopes: `geometry calibration detection tracking interface view render desk app puzzle tower-defense ci docs deps`. Example: `feat(detection): find yellow notes as quads`.
+- **Conventional Commits.** Scopes: `geometry calibration detection tracking interface view render desk app nest puzzle tower-defense ci docs deps`. Example: `feat(detection): find yellow notes as quads`.
 - **No AI co-authors.** Commits and PRs are authored by the human only. Never add a `Co-Authored-By: Claude` trailer or a "Generated with Claude Code" line to a commit message or PR body. `.claude/settings.json` turns Claude Code's byline off (`attribution`); don't add it by hand.
 - A choice that's expensive to reverse gets an ADR: `/new-adr`.
 - Ready for review: `/ship` (it runs `make check`, self-reviews, and opens the PR).
