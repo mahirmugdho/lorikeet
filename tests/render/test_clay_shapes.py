@@ -4,7 +4,15 @@ import numpy as np
 import pytest
 
 from lorikeet.render.clay.mesher import mesh_field
-from lorikeet.render.clay.shapes import Ellipsoid, RoundCone, rotation, smooth_union
+from lorikeet.render.clay.shapes import (
+    Ellipsoid,
+    RoundCone,
+    Scaled,
+    Slab,
+    Torus,
+    rotation,
+    smooth_union,
+)
 
 
 def points(*xyz: tuple[float, float, float]) -> np.ndarray:
@@ -111,3 +119,35 @@ def _is_closed(triangles: np.ndarray) -> bool:
 def _area(mesh) -> float:
     a, b, c = (mesh.positions[mesh.triangles[:, i]] for i in range(3))
     return float(np.linalg.norm(np.cross(b - a, c - a), axis=1).sum() / 2)
+
+
+def test_a_torus_is_a_ring_round_its_axis():
+    ring = Torus(centre=(0, 0, 0), ring=10, tube=2)
+
+    d = ring.distance(points((12, 0, 0), (0, -8, 0), (10, 0, 2), (0, 0, 0)))
+
+    assert d == pytest.approx([0, 0, 0, 8], abs=1e-5)
+
+
+def test_scaling_never_overstates_the_distance():
+    ball = Ellipsoid(centre=(0, 0, 0), radii=(5, 5, 5))
+    flat = Scaled(ball, (1.0, 0.4, 1.0))
+
+    d = flat.distance(points((5, 0, 0), (0, 2, 0), (0, 4, 0)))
+
+    assert d[:2] == pytest.approx([0, 0], abs=1e-5)
+    assert 0 < d[2] <= 2.0 + 1e-5  # truly 2 from the squashed surface
+
+
+def test_a_slab_keeps_its_outline_and_rounds_its_edges_inside_it():
+    box = ((0.0, 0.0), (100.0, 0.0), (100.0, -20.0), (0.0, -20.0))  # x, z: 20 tall
+    slab = Slab(box, front=-10, back=10, round=4)
+
+    # Points are (x, depth, z).
+    d = slab.distance(points((50, 0, 0), (50, 0, -10), (50, -10, -10), (50, -10, 0), (0, 0, 0)))
+
+    assert d[0] == pytest.approx(0, abs=1e-4)  # the top edge, mid-depth: on the outline
+    assert d[1] == pytest.approx(-10, abs=1e-4)  # the very middle
+    assert d[2] == pytest.approx(0, abs=1e-4)  # the front face
+    assert d[3] == pytest.approx(4 * (2**0.5 - 1), abs=1e-3)  # the front top edge is rounded
+    assert d[4] > 0  # and so are the ends

@@ -49,6 +49,7 @@ def main() -> None:
     parser.add_argument("out", nargs="?", type=Path, default=Path(".lorikeet/lookdev"))
     parser.add_argument("--time", action="store_true", help="time frames in a window")
     parser.add_argument("--offscreen", action="store_true", help="with --time: no window")
+    parser.add_argument("--no-detail", action="store_true", help="leave out the fingerprints")
     parser.add_argument("--size", type=int, nargs=2, default=SIZE, metavar=("W", "H"))
     parser.add_argument("--step", type=float, default=0.5, help="mesh grid step, in pixels")
     parser.add_argument("--frames", type=int, default=600)
@@ -90,6 +91,8 @@ def main() -> None:
     assert base.win is not None, "Panda3D couldn't open a window or offscreen buffer"
     print(f"framebuffer: {base.win.getFbProperties()}")
     stage = Stage(base, size, detail, Light())
+    if args.no_detail:
+        stage.root.setShaderInput("detail_strength", 0.0)
     tilt = stage.root.attachNewNode("lori tilt")
     tilt.setPos(*to_world(CENTRE))
     tilt.setP(TURN[1])

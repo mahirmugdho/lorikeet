@@ -114,3 +114,36 @@ def test_lori_scales_with_her_radius():
         return float(np.ptp(mesh.positions[:, 2]))
 
     assert height(big) == pytest.approx(2 * height(small), rel=0.05)
+
+
+def test_mottling_varies_the_clay_colour_faintly():
+    """Real plasticine isn't one perfectly even colour: pigment and handling leave faint
+    lighter and darker patches. The tint carries that, a few percent either way."""
+    plain = build(two_balls(), step=0.5)
+    mottled = build(two_balls(mottle=0.05, mottle_size=3), step=0.5)
+
+    assert np.allclose(plain.tint, 1)
+    assert mottled.tint.mean() == pytest.approx(1, abs=0.02)
+    assert 0.01 < mottled.tint.std() < 0.05
+    assert np.abs(mottled.tint - 1).max() < 0.15
+
+
+def test_part_weights_are_whole_on_a_part_and_shared_at_the_join():
+    figure = Figure(
+        (
+            Piece(Ellipsoid((-4, 0, 0), (5, 5, 5)), "red"),
+            Piece(Ellipsoid((4, 0, 0), (5, 5, 5)), "red", blend=3, part="head"),
+        ),
+        {"red": (200, 40, 40)},
+    )
+
+    w = figure.part_weights(points_at((-9, 0, 0), (9, 0, 0), (0, 0, 3)))
+
+    assert figure.part_names == ["", "head"]
+    assert w.sum(axis=1) == pytest.approx([1, 1, 1])
+    assert w[0, 0] > 0.97 and w[1, 1] > 0.97  # far ends: all body, all head
+    assert w[2] == pytest.approx([0.5, 0.5], abs=0.01)  # the join: half and half
+
+
+def points_at(*xyz) -> np.ndarray:
+    return np.array(xyz, dtype=np.float32)

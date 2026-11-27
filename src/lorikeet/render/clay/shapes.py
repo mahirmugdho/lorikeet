@@ -172,3 +172,124 @@ class Lumps:
                 weight *= f[:, axis] if pick[axis] else 1 - f[:, axis]
             total += weight * self._lattice[idx[0], idx[1], idx[2]]
         return total
+
+
+@dataclass(frozen=True)
+class Torus:
+    """A ring: a tube of radius `tube` bent round a circle of radius `ring`, lying flat
+    around the shape's own z axis. Coils of rope (the nest) and the go ring."""
+
+    centre: Vec3
+    ring: float
+    tube: float
+    turn: np.ndarray = field(default_factory=lambda: IDENTITY)
+
+    def distance(self, p: np.ndarray) -> np.ndarray:
+        q = (p - np.asarray(self.centre, dtype=np.float32)) @ self.turn
+        around = np.hypot(q[:, 0], q[:, 1]) - self.ring
+        return (np.hypot(around, q[:, 2]) - self.tube).astype(np.float32)
+
+    def bounds(self) -> tuple[np.ndarray, np.ndarray]:
+        c, reach = np.asarray(self.centre), self.ring + self.tube
+        return c - reach, c + reach
+
+
+@dataclass(frozen=True)
+class Scaled:
+    """Another shape stretched or squashed along x, y and z about the origin.
+
+    A stretched distance isn't a true distance any more, so it's scaled down by the
+    smallest stretch: then it's never more than the true distance, which is what the
+    mesher and the blending need (they only go wrong if a distance is too big)."""
+
+    shape: Shape
+    scale: Vec3
+
+    def distance(self, p: np.ndarray) -> np.ndarray:
+        s = np.asarray(self.scale, dtype=np.float32)
+        return (self.shape.distance(p / s) * s.min()).astype(np.float32)
+
+    def bounds(self) -> tuple[np.ndarray, np.ndarray]:
+        low, high = self.shape.bounds()
+        s = np.asarray(self.scale)
+        return np.minimum(low * s, high * s), np.maximum(low * s, high * s)
+
+
+@dataclass(frozen=True)
+class Slab:
+    """A flat shape cut from a rolled-out sheet of clay: a polygon in the wall's plane
+    (world x and z), `front` to `back` deep (world y), with edges rounded `round` pixels.
+
+    The outline is kept exactly: the rounding goes inside it, so a ledge's top edge is
+    where the physics has it. Its distance is the polygon's 2D distance, taken out into
+    depth ("extruded"), as in Inigo Quilez's catalogue."""
+
+    outline: tuple[tuple[float, float], ...]
+    """Points in world x and z (not projector pixels: z is up)."""
+    front: float
+    back: float
+    round: float
+
+    def distance(self, p: np.ndarray) -> np.ndarray:
+        shrunk = _inset(np.asarray(self.outline, dtype=np.float64), self.round)
+        middle, half = (self.front + self.back) / 2, (self.back - self.front) / 2
+        across = _polygon_distance(shrunk, p[:, [0, 2]])  # the outline shrunk by the rounding...
+        deep = np.abs(p[:, 1] - middle) - (half - self.round)
+        outside = np.hypot(np.maximum(across, 0), np.maximum(deep, 0))
+        inside = np.minimum(np.maximum(across, deep), 0)
+        return (outside + inside - self.round).astype(np.float32)  # ...then grown back round
+
+    def bounds(self) -> tuple[np.ndarray, np.ndarray]:
+        xz = np.asarray(self.outline)
+        low = np.array([xz[:, 0].min(), self.front, xz[:, 1].min()])
+        high = np.array([xz[:, 0].max(), self.back, xz[:, 1].max()])
+        return low, high
+
+
+def _inset(polygon: np.ndarray, by: float) -> np.ndarray:
+    """The polygon with every edge moved `by` inward, corners following along their mitre
+    (the line halfway between the two edges). Right for convex outlines such as ledges and
+    notes; a deep notch would fold over, which these shapes don't have."""
+    area = 0.5 * np.sum(
+        polygon[:, 0] * np.roll(polygon[:, 1], -1) - np.roll(polygon[:, 0], -1) * polygon[:, 1]
+    )
+    edges = np.roll(polygon, -1, axis=0) - polygon
+    normals = np.stack([-edges[:, 1], edges[:, 0]], axis=1)
+    normals /= np.linalg.norm(normals, axis=1, keepdims=True)
+    if area < 0:  # wound clockwise: the left-hand normal points out
+        normals = -normals
+    before, after = np.roll(normals, 1, axis=0), normals  # the edges either side of each point
+    mitre = (before + after) / (1 + np.einsum("ij,ij->i", before, after))[:, None]
+    return polygon + by * mitre
+
+
+def _polygon_distance(polygon: np.ndarray, p: np.ndarray) -> np.ndarray:
+    """Signed distance from 2D points to a polygon: the distance to the nearest edge,
+    negative inside. Inside or out is decided by counting how many edges a ray from the
+    point crosses (odd is inside)."""
+    nearest = np.full(len(p), np.inf)
+    inside = np.zeros(len(p), dtype=bool)
+    for a, b in zip(polygon, np.roll(polygon, -1, axis=0), strict=True):
+        edge = b - a
+        to_p = p - a
+        t = np.clip(to_p @ edge / (edge @ edge), 0.0, 1.0)
+        nearest = np.minimum(nearest, np.linalg.norm(to_p - np.outer(t, edge), axis=1))
+        crosses = (a[1] > p[:, 1]) != (b[1] > p[:, 1])
+        with np.errstate(divide="ignore", invalid="ignore"):
+            at_x = a[0] + (p[:, 1] - a[1]) * edge[0] / edge[1]
+        inside ^= crosses & (p[:, 0] < at_x)
+    return np.where(inside, -nearest, nearest)
+
+
+def disc(centre, radius: float, thickness: float, facing) -> Ellipsoid:
+    """A flattened ball (an eye, a pupil, a speckle) whose flat face looks along `facing`."""
+    z = np.asarray(facing, dtype=np.float64)
+    z /= np.linalg.norm(z)
+    x = np.cross([0.0, 0.0, 1.0], z)
+    if np.linalg.norm(x) < 1e-6:
+        x = np.array([1.0, 0.0, 0.0])
+    x /= np.linalg.norm(x)
+    y = np.cross(z, x)
+    turn = np.stack([x, y, z], axis=1).astype(np.float32)
+    x0, y0, z0 = (float(c) for c in centre)
+    return Ellipsoid((x0, y0, z0), (radius, radius, thickness), turn)

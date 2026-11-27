@@ -15,6 +15,15 @@ in vec4 p3d_Color;  // rgb: a tint for the clay's colour (white on figures); a: 
 in vec4 clay_a;
 in vec4 clay_b;
 in vec4 clay_c;
+// How much each movable part (body, head, near wing, far wing) moves this vertex.
+in vec4 parts;
+
+// Posing, like a puppet's armature: where each part has moved to (part_move), and the
+// matching turn for normals (part_turn: the inverse transpose of part_move's 3x3, which
+// keeps normals at right angles to the surface even when a part is squashed). Each vertex
+// moves by the blend of its parts' moves, so a joint bends smoothly instead of tearing.
+uniform mat4 part_move[4];
+uniform mat3 part_turn[4];
 
 // Boil: in stop-motion every frame is a new photo of clay that's been handled since the
 // last one, so the surface creeps very slightly from frame to frame. We fake that by
@@ -58,9 +67,18 @@ void main() {
     vec3 pos = p3d_Vertex.xyz;
     if (boil_amount > 0.0) {
         // Each boil step jumps to an unrelated patch of noise; lumps about 12 px apart.
+        // Done on the figure's rest shape, before posing, so the creep sticks to the clay.
         vec3 jump = vec3(17.13, 31.71, 7.37) * boil_seed;
         pos += normal * boil_amount * noise(pos / 12.0 + jump);
     }
+    vec4 posed = vec4(0.0);
+    vec3 turned = vec3(0.0);
+    for (int i = 0; i < 4; i++) {
+        posed += parts[i] * (part_move[i] * vec4(pos, 1.0));
+        turned += parts[i] * (part_turn[i] * normal);
+    }
+    pos = posed.xyz;
+    normal = normalize(turned);
     vec4 here = vec4(pos, 1.0);
     gl_Position = p3d_ModelViewProjectionMatrix * here;
     v_world_pos = (p3d_ModelMatrix * here).xyz;

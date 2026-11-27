@@ -119,6 +119,15 @@ vec4 sample_detail(vec3 p, vec3 n, out vec3 tilt) {
 // is itself filtered by the hardware between four texels, so edges are smooth close up.
 const int TAPS = 32;
 
+// One sample: sample i of the spiral, at radius sqrt(i / TAPS) so the disc is evenly
+// covered, each turned from the last by the golden angle.
+float shadow_tap(vec3 coord, mat2 turn, int i) {
+    float r = sqrt((float(i) + 0.5) / float(TAPS));
+    float a = float(i) * 2.39996323;  // the golden angle, in radians
+    vec2 offset = turn * vec2(cos(a), sin(a)) * r * shadow_radius;
+    return texture(p3d_LightSource[0].shadowMap, vec3(coord.xy + offset, coord.z - shadow_bias));
+}
+
 float key_shadow(vec3 view_pos, vec3 view_normal) {
     // Step out a little along the normal first, so a surface never shadows itself from
     // rounding error ("shadow acne"). A step along the normal moves the lookup off the
@@ -129,12 +138,15 @@ float key_shadow(vec3 view_pos, vec3 view_normal) {
     vec3 coord = at.xyz / at.w;
     float angle = 6.2831853 * pixel_noise(gl_FragCoord.xy);
     mat2 turn = mat2(cos(angle), sin(angle), -sin(angle), cos(angle));
+    // Most of the screen is plainly lit or plainly in shadow, and only near a shadow's edge
+    // does the full set of samples matter. So take every fourth sample first (8, spread
+    // over the whole disc); if they all agree, that's the answer, and the other 24 are
+    // skipped. It makes the backdrop, which fills the screen, several times cheaper.
     float lit = 0.0;
+    for (int i = 0; i < TAPS; i += 4) lit += shadow_tap(coord, turn, i);
+    if (lit == 0.0 || lit == float(TAPS / 4)) return lit / float(TAPS / 4);
     for (int i = 0; i < TAPS; i++) {
-        float r = sqrt((float(i) + 0.5) / float(TAPS));
-        float a = float(i) * 2.39996323;  // the golden angle, in radians
-        vec2 offset = turn * vec2(cos(a), sin(a)) * r * shadow_radius;
-        lit += texture(p3d_LightSource[0].shadowMap, vec3(coord.xy + offset, coord.z - shadow_bias));
+        if (i % 4 != 0) lit += shadow_tap(coord, turn, i);
     }
     return lit / float(TAPS);
 }

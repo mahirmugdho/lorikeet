@@ -16,7 +16,7 @@ from __future__ import annotations
 import numpy as np
 
 from lorikeet.render.clay.figure import Figure, Piece
-from lorikeet.render.clay.shapes import Ellipsoid, RoundCone, rotation
+from lorikeet.render.clay.shapes import Ellipsoid, RoundCone, disc, rotation
 
 CLAYS = {
     "head": (72, 84, 214),  # violet-blue
@@ -36,6 +36,14 @@ detection ignores colours inside the game's own things (issue #12)."""
 RADIUS = 34.0
 """The radius the numbers below are written for: the game's Lori."""
 
+NECK = (8.0, 0.0, 8.0)
+"""Where her head turns and nods from, at radius 34."""
+SHOULDER = (-2.0, 14.0, 6.0)
+"""Where her far wing hinges, at radius 34 (the near one is at -y)."""
+FEET = -32.5
+"""How far below her middle the soles of her feet are, at radius 34: she squashes and
+stretches from here, so her feet stay planted."""
+
 
 def lori(radius: float = RADIUS) -> Figure:
     s = radius / RADIUS
@@ -50,17 +58,21 @@ def lori(radius: float = RADIUS) -> Figure:
     pieces = [
         Piece(ball((0, 0, -6), (24, 21, 23), pitch=10), "back"),
         Piece(ball((-27, 0, -19), (14, 7, 4.5), pitch=35), "back", blend=5 * s),
-        Piece(ball(head, (17, 16, 15.5)), "head", blend=9 * s),
+        Piece(ball(head, (17, 16, 15.5)), "head", blend=9 * s, part="head"),
         Piece(ball((7, 0, 8.5), (15, 17.5, 6), pitch=-15), "collar", blend=2.5 * s),
         Piece(ball((12, 0, -1), (15, 16.5, 13.5)), "chest", blend=2.5 * s),
         Piece(ball((9, 0, -17), (14, 15, 9.5)), "belly", blend=2.5 * s),
     ]
     # Wings: a teardrop each, a broad shoulder tapering back and down to a tip over the
     # tail, as a folded wing does. The far wing sits a touch differently, as by hand.
-    for side, lift in ((-1, 0.0), (1, 0.6)):
+    for side, lift, part in ((-1, 0.0, "near wing"), (1, 0.6, "far wing")):
         pieces += [
-            Piece(ball((-2, side * 18.6, -1 + lift), (15, 5.5, 12.5), pitch=18), "wing", 2 * s),
-            Piece(ball((-13, side * 17.6, -7.5 + lift), (13, 4.4, 7), pitch=30), "wing", 8 * s),
+            Piece(
+                ball((-2, side * 18.6, -1 + lift), (15, 5.5, 12.5), pitch=18), "wing", 2 * s, part
+            ),
+            Piece(
+                ball((-13, side * 17.6, -7.5 + lift), (13, 4.4, 7), pitch=30), "wing", 8 * s, part
+            ),
         ]
     # Tiny feet: an ankle and two stubby toes forward, peeking out under the belly.
     for side, nudge in ((-1, 0.0), (1, 0.4)):
@@ -71,9 +83,9 @@ def lori(radius: float = RADIUS) -> Figure:
             Piece(cone((4, y, -30), (9, y + 2.2, -31.8), 2.1, 1.6), "feet", blend=1 * s),
         ]
     pieces += [
-        Piece(cone((22, 0, 20), (31, 0, 13.5), 6.0, 2.2), "beak", blend=2 * s),
-        Piece(cone((29.5, 0, 15), (31.5, 0, 10.5), 2.6, 1.3), "beak", blend=1.5 * s),
-        Piece(cone((21, 0, 14.5), (27, 0, 12.5), 4.2, 2.0), "beak", blend=1.5 * s),
+        Piece(cone((22, 0, 20), (31, 0, 13.5), 6.0, 2.2), "beak", blend=2 * s, part="head"),
+        Piece(cone((29.5, 0, 15), (31.5, 0, 10.5), 2.6, 1.3), "beak", 1.5 * s, part="head"),
+        Piece(cone((21, 0, 14.5), (27, 0, 12.5), 4.2, 2.0), "beak", blend=1.5 * s, part="head"),
     ]
     for side, (forward, out, up) in ((-1, (0.38, 0.86, 0.26)), (1, (0.37, 0.87, 0.24))):
         look = np.array([forward, side * out, up])
@@ -81,8 +93,8 @@ def lori(radius: float = RADIUS) -> Figure:
         white = np.array(head) + look * 14.2
         # The pupil sits a little forward on the white, so she looks ahead, not sideways.
         pupil = np.array(head) + look * 16.6 + np.array([1.6, 0, 0.3])
-        pieces.append(Piece(_disc(white * s, 8.6 * s, 2.6 * s, look), "eye", blend=1.2 * s))
-        pieces.append(Piece(_disc(pupil * s, 4.6 * s, 1.8 * s, look), "pupil", blend=0.6 * s))
+        pieces.append(Piece(disc(white * s, 8.6 * s, 2.6 * s, look), "eye", 1.2 * s, "head"))
+        pieces.append(Piece(disc(pupil * s, 4.6 * s, 1.8 * s, look), "pupil", 0.6 * s, "head"))
     return Figure(
         tuple(pieces),
         CLAYS,
@@ -90,20 +102,10 @@ def lori(radius: float = RADIUS) -> Figure:
         lump_size=8 * s,
         seam_depth=0.5 * s,
         seam_width=0.7 * s,
+        mottle=0.065,
+        mottle_size=6 * s,
         seed=7,
     )
-
-
-def _disc(centre: np.ndarray, radius: float, thickness: float, facing: np.ndarray) -> Ellipsoid:
-    """A flattened ball (an eye, a pupil) whose flat face looks along `facing`."""
-    z = facing / np.linalg.norm(facing)
-    x = np.cross([0.0, 0.0, 1.0], z)
-    if np.linalg.norm(x) < 1e-6:
-        x = np.array([1.0, 0.0, 0.0])
-    x /= np.linalg.norm(x)
-    y = np.cross(z, x)
-    turn = np.stack([x, y, z], axis=1).astype(np.float32)
-    return Ellipsoid(tuple(centre), (radius, radius, thickness), turn)
 
 
 def _scaled(v, s: float) -> tuple[float, float, float]:

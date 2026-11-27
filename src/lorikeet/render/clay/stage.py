@@ -28,6 +28,11 @@ from importlib.resources import files
 import numpy as np
 from panda3d.core import (
     AntialiasAttrib,
+    BitMask32,
+    CardMaker,
+    ColorBlendAttrib,
+    ColorWriteAttrib,
+    CullFaceAttrib,
     DirectionalLight,
     Geom,
     GeomNode,
@@ -35,12 +40,18 @@ from panda3d.core import (
     GeomVertexArrayFormat,
     GeomVertexData,
     GeomVertexFormat,
+    LMatrix3f,
+    LMatrix4f,
     NodePath,
     OrthographicLens,
     Point3,
+    PTA_LMatrix3f,
+    PTA_LMatrix4f,
     PTA_LVecBase3f,
+    RenderState,
     SamplerState,
     Shader,
+    ShaderAttrib,
     Texture,
     Vec3,
 )
@@ -48,7 +59,7 @@ from panda3d.core import (
 from lorikeet.render.clay.colour import linear
 from lorikeet.render.clay.coords import to_world
 from lorikeet.render.clay.detail import TILE, Detail
-from lorikeet.render.clay.figure import MAX_CLAYS, ClayMesh
+from lorikeet.render.clay.figure import MAX_CLAYS, MAX_PARTS, ClayMesh
 
 CAMERA_DISTANCE = 1000.0
 """How far in front of the play layer the camera sits. With an orthographic lens this
@@ -66,6 +77,12 @@ is close to yellow's."""
 
 SHADOW_MAP = 4096
 """Shadow map texels per side."""
+
+SEEN = BitMask32.bit(0)
+"""Drawn by the camera."""
+SHADOWS = BitMask32.bit(1)
+"""Drawn into the key light's shadow map. A note's stand-in box is only this: invisible,
+but it casts a shadow, as the real paper on the wall would if it stood out from it."""
 
 
 @dataclass
@@ -124,12 +141,14 @@ class Stage:
 
         lens, place = canvas_camera(size)
         base.cam.node().setLens(lens)
+        base.cam.node().setCameraMask(SEEN)
         base.cam.setPos(place)
         base.cam.lookAt(place + Vec3(0, 1, 0))
 
         self.key = DirectionalLight("key")
         self.key.setColor((light.key, light.key * 0.98, light.key * 0.95, 1))  # near white
         self.key.setShadowCaster(True, SHADOW_MAP, SHADOW_MAP)
+        self.key.setCameraMask(SHADOWS)
         self.key_np = self.root.attachNewNode(self.key)
         self.root.setLight(self.key_np)
         self._fit_key()
@@ -137,6 +156,22 @@ class Stage:
         vert = files("lorikeet.render.clay").joinpath("shaders/clay.vert").read_text()
         frag = files("lorikeet.render.clay").joinpath("shaders/clay.frag").read_text()
         self.root.setShader(Shader.make(Shader.SL_GLSL, vert, frag))
+        # The shadow map is drawn by the light's own camera, with the scene's shaders. All it
+        # needs is depth, so give it the same vertex shader (poses and boil cast shadows
+        # too) and a fragment shader that does nothing. Otherwise the full clay shader would
+        # run for every shadow-map pixel, reading the very map it's drawing into. Priority
+        # 1000 makes it win over the scene's shader; the scene's inputs still come through.
+        # Reverse culling (draw back faces only) and no colour are Panda3D's own defaults
+        # for a shadow camera, kept: back faces make the map a little deeper than the
+        # surfaces facing the light, which helps against shadow acne.
+        depth_only = Shader.make(Shader.SL_GLSL, vert, "#version 330\nvoid main() {}\n")
+        self.key.setInitialState(
+            RenderState.make(
+                CullFaceAttrib.makeReverse(),
+                ColorWriteAttrib.make(ColorWriteAttrib.COff),
+                ShaderAttrib.make(depth_only, 1000),
+            )
+        )
         self.root.setShaderInput("detail", _detail_texture(detail))
         self.root.setShaderInput("detail_tile", TILE)
         toward = light.toward_key()
@@ -155,6 +190,7 @@ class Stage:
         self.set_softness(self.root, pixels=1.6)
         self.root.setShaderInput("detail_strength", 1.0)
         self.root.setShaderInput("debug_view", 0)
+        pose(self.root, [np.eye(4)] * MAX_PARTS)  # nothing posed unless a figure says so
 
         self.backdrop = self._backdrop()
 
@@ -230,9 +266,11 @@ class Stage:
             distances,
             np.ones((MAX_CLAYS, 3), dtype=np.float32),
             albedo.reshape(-1, 3).astype(np.float32),
+            np.tile(np.array([1, 0, 0, 0], dtype=np.float32), (len(positions), 1)),
         )
         node = figure_node(mesh, "backdrop")
         node.reparentTo(self.root)
+        node.hide(SHADOWS)  # it's behind everything: nothing for it to shadow
         node.setShaderInput("detail_strength", 0.0)
         node.setShaderInput("sheen_strength", 0.0)
         # The softbox is far bigger than a figure, so on the backdrop, well behind it, the
@@ -241,21 +279,100 @@ class Stage:
         self.set_softness(node, pixels=5.0)
         return node
 
+    def wall_layer(self) -> NodePath:
+        """A card over the whole frame that multiplies the picture by the wall: white where
+        the wall is bare, paper where the desk's notes are (see `render/__init__.py`). Set
+        its texture with `set_wall`."""
+        card = CardMaker("wall")
+        card.setFrameFullscreenQuad()
+        node = self.base.render2d.attachNewNode(card.generate())
+        # Multiply: the new colour is the picture's colour times the card's.
+        node.setAttrib(
+            ColorBlendAttrib.make(
+                ColorBlendAttrib.M_add, ColorBlendAttrib.O_fbuffer_color, ColorBlendAttrib.O_zero
+            )
+        )
+        node.setDepthTest(False)
+        node.setDepthWrite(False)
+        return node
+
+
+def pose(node: NodePath, moves: list[np.ndarray]) -> None:
+    """Set where each movable part of a figure has moved to: one 4x4 matrix per part (in
+    column-vector form, as numpy writes them), body first."""
+    moved, turned = PTA_LMatrix4f.emptyArray(MAX_PARTS), PTA_LMatrix3f.emptyArray(MAX_PARTS)
+    for i, m in enumerate(moves[:MAX_PARTS]):
+        # Panda3D stores matrices transposed (it multiplies row vectors), and hands them to
+        # GLSL as stored, so a transposed matrix arrives as the matrix we meant.
+        moved[i] = LMatrix4f(*np.asarray(m, dtype=np.float64).T.flatten())
+        normal = np.linalg.inv(m[:3, :3]).T
+        turned[i] = LMatrix3f(*normal.T.flatten())
+    node.setShaderInput("part_move", moved)
+    node.setShaderInput("part_turn", turned)
+
+
+def shadow_box(outline, back: float) -> NodePath:
+    """An invisible prism the shape of `outline` (projector pixels around its centre),
+    from the play layer back to `back`, that only casts a shadow. Real notes are paper on
+    the wall: this lets them cast a soft shadow onto the clay set, starting right at the
+    paper's edge. Built directly, not meshed, so a new note costs nothing."""
+    ring = np.array([(x, -y) for x, y in outline], dtype=np.float32)
+    n = len(ring)
+    front = np.stack([ring[:, 0], np.zeros(n), ring[:, 1]], axis=1)
+    rear = np.stack([ring[:, 0], np.full(n, back), ring[:, 1]], axis=1)
+    positions = np.concatenate([front, rear]).astype(np.float32)
+    sides = [(i, (i + 1) % n, n + (i + 1) % n) for i in range(n)]
+    sides += [(i, n + (i + 1) % n, n + i) for i in range(n)]
+    caps = [(0, i, i + 1) for i in range(1, n - 1)]
+    caps += [(n, n + i + 1, n + i) for i in range(1, n - 1)]
+    triangles = np.array(sides + caps, dtype=np.uint32)
+    count = len(positions)
+    mesh = ClayMesh(
+        positions,
+        np.tile(np.array([0, -1, 0], dtype=np.float32), (count, 1)),
+        np.ones(count, dtype=np.float32),
+        triangles,
+        np.zeros((count, MAX_CLAYS), dtype=np.float32),
+        np.ones((MAX_CLAYS, 3), dtype=np.float32),
+        np.ones((count, 3), dtype=np.float32),
+        np.tile(np.array([1, 0, 0, 0], dtype=np.float32), (count, 1)),
+    )
+    node = figure_node(mesh, "note shadow")
+    node.hide(SEEN)
+    node.setTwoSided(True)  # wound either way round, it still blocks the light
+    return node
+
+
+def set_wall(card: NodePath, wall_rgb: bytes, size: tuple[int, int]) -> None:
+    """Put the wall (8-bit RGB rows, top row first) on the wall card."""
+    width, height = size
+    texture = card.getTexture() if card.hasTexture() else None
+    if texture is None or texture.getXSize() != width or texture.getYSize() != height:
+        texture = Texture("wall")
+        texture.setup2dTexture(width, height, Texture.T_unsigned_byte, Texture.F_rgb)
+        texture.setMinfilter(SamplerState.FT_nearest)
+        texture.setMagfilter(SamplerState.FT_nearest)
+        card.setTexture(texture)
+    rows = np.frombuffer(wall_rgb, dtype=np.uint8).reshape(height, width, 3)
+    # Panda3D textures start at the bottom row, and keep blue, green, red.
+    texture.setRamImage(np.ascontiguousarray(rows[::-1, :, ::-1]).tobytes())
+
 
 _FORMAT: GeomVertexFormat | None = None
 
 
 def _vertex_format() -> GeomVertexFormat:
     """Per vertex, in one interleaved array of floats: position, normal, colour (rgb: the
-    tint, a: occlusion) and the distance to each clay, in three groups of four. Floats, not
-    the usual 8-bit colour, so the occlusion's soft gradients don't step."""
+    tint, a: occlusion), the distance to each clay in three groups of four, and the weight
+    of each movable part. Floats, not the usual 8-bit colour, so the occlusion's soft
+    gradients don't step."""
     global _FORMAT
     if _FORMAT is None:
         array = GeomVertexArrayFormat()
         array.addColumn("vertex", 3, Geom.NT_float32, Geom.C_point)
         array.addColumn("normal", 3, Geom.NT_float32, Geom.C_normal)
         array.addColumn("color", 4, Geom.NT_float32, Geom.C_color)
-        for group in ("clay_a", "clay_b", "clay_c"):
+        for group in ("clay_a", "clay_b", "clay_c", "parts"):
             array.addColumn(group, 4, Geom.NT_float32, Geom.C_other)
         _FORMAT = GeomVertexFormat.registerFormat(GeomVertexFormat(array))
     return _FORMAT
@@ -266,7 +383,14 @@ def figure_node(mesh: ClayMesh, name: str) -> NodePath:
     straight into Panda3D's vertex buffer, which is far faster than writing vertices one by
     one from Python."""
     rows = np.concatenate(
-        [mesh.positions, mesh.normals, mesh.tint, mesh.occlusion[:, None], mesh.clay_distances],
+        [
+            mesh.positions,
+            mesh.normals,
+            mesh.tint,
+            mesh.occlusion[:, None],
+            mesh.clay_distances,
+            mesh.part_weights,
+        ],
         axis=1,
     ).astype(np.float32)
     data = GeomVertexData(name, _vertex_format(), Geom.UH_static)

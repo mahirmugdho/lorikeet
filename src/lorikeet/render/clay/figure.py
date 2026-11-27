@@ -17,6 +17,9 @@ What makes it read as handmade clay, and where each part happens:
   The occlusion below then darkens it.
 - **Lumps and dents.** A little smooth noise pushes the whole surface gently in and out
   (`shapes.Lumps`), so nothing is a perfect sphere.
+- **Mottling.** Real plasticine is never one perfectly even colour: the pigment isn't quite
+  evenly kneaded in, and handling leaves faintly lighter and darker patches. Each vertex's
+  colour is nudged a few percent by smooth noise, baked in here so it costs nothing to draw.
 - **Dark crevices.** Ambient occlusion, baked into each vertex: how boxed-in the surface is
   by the figure's own shape. Creases, seams and the gap under a wing come out darker, like
   soft studio light that can't quite reach in. The meshes never change shape, so it's done
@@ -46,6 +49,8 @@ class Piece:
     blend: float = 0.0
     """How wide the soft neck is where it's pressed onto the pieces before it, in pixels.
     Big for parts of one body (a head on a body), small for things pressed on (eyes)."""
+    part: str = ""
+    """Which movable part it belongs to, for posing ("head", a wing). "" is the body."""
 
 
 @dataclass(frozen=True)
@@ -63,6 +68,13 @@ class Figure:
     """About how wide the groove is, in pixels."""
     seed: int = 0
     """Picks the lumps, so two figures from one recipe can differ."""
+    mottle: float = 0.0
+    """How much the colour wanders in faint patches: 0.05 is 5% lighter or darker."""
+    mottle_size: float = 6.0
+    """About how big the patches are, in pixels."""
+    part_blend: float = 2.0
+    """How far, in pixels, one part fades into the next where they join, so a turning head
+    bends the neck like clay instead of tearing away from it."""
     reach: float = 6.0
     """How far from a piece its exact distance is still worked out, in pixels. Further out
     only a lower bound is used, which is all the mesher needs there: it only has to know
@@ -90,6 +102,27 @@ class Figure:
     def clay_distances(self, p: np.ndarray) -> np.ndarray:
         """How far each point is from each clay: (clays, n), clays in `clay_names` order."""
         return self._pieces(p)[1]
+
+    @property
+    def part_names(self) -> list[str]:
+        """The body first, then the movable parts in the order they first appear."""
+        return ["", *dict.fromkeys(p.part for p in self.pieces if p.part)]
+
+    def part_weights(self, p: np.ndarray) -> np.ndarray:
+        """How much each part moves each point: (n, parts), each row adding up to 1.
+
+        A point on the head is all head. Near where the head joins the body, both are
+        about equally near, so it's half and half, and it fades smoothly between: each
+        part's weight falls off exponentially with how much further away it is than the
+        nearest part."""
+        names = self.part_names
+        nearest = np.full((len(names), len(p)), np.inf, dtype=np.float32)
+        for piece in self.pieces:
+            row = names.index(piece.part)
+            nearest[row] = np.minimum(nearest[row], piece.shape.distance(p))
+        further = nearest - nearest.min(axis=0)
+        weights = np.exp(-further / self.part_blend)
+        return (weights / weights.sum(axis=0)).T.astype(np.float32)
 
     @property
     def clay_names(self) -> list[str]:
@@ -129,6 +162,10 @@ MAX_CLAYS = 12
 """The most clays one figure can use: the shader gets each vertex's distance to every clay
 in three groups of four."""
 
+MAX_PARTS = 4
+"""The most movable parts (counting the body) one figure can have: the shader gets each
+vertex's weight for every part in one group of four."""
+
 
 @dataclass(frozen=True)
 class ClayMesh:
@@ -151,8 +188,11 @@ class ClayMesh:
     palette: np.ndarray
     """(MAX_CLAYS, 3) float32: each clay's colour in linear light (see `colour.py`)."""
     tint: np.ndarray
-    """(n, 3) float32: multiplies the clay's colour per vertex. White on figures; the
-    backdrop uses it for its gradient."""
+    """(n, 3) float32: multiplies the clay's colour per vertex: the mottling on figures,
+    the gradient on the backdrop."""
+    part_weights: np.ndarray
+    """(n, MAX_PARTS) float32: how much each movable part moves each vertex (see
+    `Figure.part_weights`). Column 0 is the body."""
 
 
 def build(figure: Figure, step: float) -> ClayMesh:
@@ -161,6 +201,8 @@ def build(figure: Figure, step: float) -> ClayMesh:
     names = figure.clay_names
     if len(names) > MAX_CLAYS:
         raise ValueError(f"a figure can use at most {MAX_CLAYS} clays, not {len(names)}")
+    if len(figure.part_names) > MAX_PARTS:
+        raise ValueError(f"a figure can have at most {MAX_PARTS} parts with its body")
     lower, upper = figure.bounds(margin=3 * step)
     mesh = mesh_field(figure.distance, tuple(lower), tuple(upper), step)
     palette = np.ones((MAX_CLAYS, 3), dtype=np.float32)
@@ -174,10 +216,31 @@ def build(figure: Figure, step: float) -> ClayMesh:
     # and a short one that only sees tight creases, so seams get a crisp dark line.
     occlusion = occlusion_at(figure.distance, mesh.positions, mesh.normals, reach=size * 0.12)
     occlusion *= occlusion_at(figure.distance, mesh.positions, mesh.normals, reach=size * 0.025)
-    tint = np.ones((len(mesh.positions), 3), dtype=np.float32)
+    tint = mottling(figure, mesh.positions)
+    parts = np.zeros((len(mesh.positions), MAX_PARTS), dtype=np.float32)
+    parts[:, : len(figure.part_names)] = figure.part_weights(mesh.positions)
     return ClayMesh(
-        mesh.positions, mesh.normals, occlusion, mesh.triangles, distances, palette, tint
+        mesh.positions, mesh.normals, occlusion, mesh.triangles, distances, palette, tint, parts
     )
+
+
+def mottling(figure: Figure, positions: np.ndarray) -> np.ndarray:
+    """Each vertex's tint: 1, nudged by faint patches of lighter and darker clay.
+
+    Mostly it's brightness (patches, plus smaller blotches at a third the size), with a
+    smaller, separate wander in each of red, green and blue so the patches aren't pure
+    grey; as in real clay, where the pigment is a little thicker in places."""
+    tint = np.ones((len(positions), 3), dtype=np.float32)
+    if figure.mottle <= 0:
+        return tint
+    size = figure.mottle_size
+    seed = figure.seed + 101
+    patches = Lumps(seed, size, 1.0)(positions) + 0.5 * Lumps(seed + 1, size / 3, 1.0)(positions)
+    tint *= 1 + figure.mottle * 0.75 * patches[:, None]
+    for channel in range(3):
+        wander = Lumps(seed + 2 + channel, size, 1.0)(positions)
+        tint[:, channel] *= 1 + figure.mottle * 0.3 * wander
+    return tint.astype(np.float32)
 
 
 def occlusion_at(
