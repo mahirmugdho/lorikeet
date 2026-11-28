@@ -195,3 +195,20 @@ def test_the_flower_bed_waits_with_its_buds_hidden_then_blooms(clay, monkeypatch
             i for i, piece in enumerate(node.find("head").getChildren()) if not piece.isHidden()
         ]
         assert shown == [3]  # wide open
+
+
+def test_a_broken_egg_splats_flat_for_a_frame_then_lies_in_pieces(clay, monkeypatch):
+    monkeypatch.setitem(scene_module.LOOKS, "egg", Look(tall, step=1.0, boil=0.3, jitter=0.0))
+    monkeypatch.setattr(scene_module, "BROKEN_EGG", Look(ball, step=1.0, boil=0.3, jitter=0.0))
+    rolling = Thing(1000, "egg", Circle(5), (100, 80), angle=1.0, layer=3)
+    clay.show(View((rolling,)), now=0.001)
+    broken = Thing(1000, "egg", Circle(5), (100, 80), angle=1.0, layer=3, pose="broken")
+
+    clay.show(View((broken,)), now=1 / 12 + 0.001)  # the frame it hits the floor
+    splat = placed(clay, "egg 1000")
+    assert splat.getSz() < 1 < splat.getSx()  # flattened, wider
+
+    clay.show(View((broken,)), now=2 / 12 + 0.001)  # the next frame: in pieces
+    pieces = placed(clay, "egg 1000")
+    assert (pieces.getSx(), pieces.getSz()) == pytest.approx((1.0, 1.0))
+    assert pieces.getR() == pytest.approx(0.0)  # lying upright, however it rolled

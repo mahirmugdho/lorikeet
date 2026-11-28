@@ -7,6 +7,7 @@ from lorikeet.render.clay.figure import build
 from lorikeet.render.clay.kinds import (
     GO_THICKNESS,
     bed_leaves,
+    broken_egg,
     egg,
     flower_head,
     go_disc,
@@ -71,3 +72,12 @@ def test_the_flower_beds_leaves_sit_on_the_ground_a_little_wider_than_its_circle
     mesh = build(bed_leaves(45), step=1.5)
     assert extent(mesh)[0] == pytest.approx(2.6 * 45, rel=0.1)
     assert mesh.positions[:, 2].min() == pytest.approx(-45, abs=8)
+
+
+def test_a_broken_egg_is_two_cracked_halves_resting_on_the_ground_in_a_puddle():
+    mesh = build(broken_egg(28), step=0.8)
+    x, z = mesh.positions[:, 0], mesh.positions[:, 2]
+
+    assert z.min() == pytest.approx(-28, abs=3.5)  # everything rests on the ground
+    assert z.max() < 28  # the top half isn't on top any more...
+    assert x.max() > 50  # ...it's lying over to the right

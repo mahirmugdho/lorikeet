@@ -12,6 +12,8 @@ How a thing's View maps onto the set:
 - **Turn.** The thing's angle turns its figure in the wall's plane. The egg tumbles as it
   rolls; it's egg-shaped but the game rolls a ball, so it's lifted or lowered a little to
   keep its lowest point where the ball's is, and it rocks along the ground like an egg.
+  When it breaks (pose "broken"), it squashes flat for one stop-motion frame, then the
+  broken egg is swapped in (`kinds.broken_egg`): two cracked halves in a puddle.
 - **Stop-motion** (see `motion.py`). Positions and turns from the game stay smooth at the
   full frame rate. On top, each figure gets its tiny per-frame jitter, and its clay boils,
   12 times a second. Ledges don't jitter (they're the physics' ground, and a set is glued
@@ -42,6 +44,7 @@ from lorikeet.render.clay.kinds import (
     FLOWER_STAGES,
     GO_THICKNESS,
     bed_leaves,
+    broken_egg,
     egg,
     flower_head,
     go_disc,
@@ -67,6 +70,9 @@ us, as if seen from slightly above. Her figure faces +x, the way the game has he
 NOTE_BOIL, NOTE_JITTER = 0.3, 0.5
 """How much a note's rope creeps and jitters each stop-motion frame: a little, so it's alive
 like the figures but never strays onto the paper."""
+
+SPLAT = (1.18, 0.78)
+"""The egg's width and height on the frame it hits the floor, before it breaks open."""
 
 GO_PRESS = (0.94, 1.04)
 """The go disc's size on the frames after the go note goes on: it gives, then springs back."""
@@ -109,6 +115,9 @@ def _outline(thing: Thing) -> tuple[tuple[float, float], ...]:
     r = _radius(thing)
     return ((-r, -r), (r, -r), (r, r), (-r, r))
 
+
+BROKEN_EGG = Look(lambda t: broken_egg(_radius(t)), step=0.6, boil=0.3, jitter=0.4)
+"""The egg once it's broken (see `ClayScene.show`)."""
 
 LOOKS = {
     "bird": Look(lambda t: lori(_radius(t)), step=1.0, boil=0.6, jitter=1.0),
@@ -153,6 +162,7 @@ class ClayScene:
         self._beds: dict[int, list[tuple[NodePath, NodePath, NodePath, list[NodePath]]]] = {}
         self._bloomed: dict[int, int] = {}  # bed id -> the frame it started blooming
         self._pressed: dict[int, tuple[str, int]] = {}  # go id -> (pose, frame it began)
+        self._broke_at: dict[int, int] = {}  # egg id -> the frame it broke
 
     def show(self, view: View, now: float) -> None:
         """Bring the set up to date with `view`, at game time `now` (seconds)."""
@@ -168,7 +178,13 @@ class ClayScene:
             if look is None:
                 continue
             present.add(thing.id)
-            node = self._node(thing, look)
+            splat = broken = False
+            if thing.kind == "egg" and thing.pose == "broken":
+                broke = self._broke_at.setdefault(thing.id, frame)
+                splat, broken = frame == broke, frame > broke
+                if broken:
+                    look = BROKEN_EGG
+            node = self._node(thing, look, "broken" if broken else "")
             if node is None:
                 continue  # its figure is still being built: it joins the set when ready
             place, figure = node
@@ -185,25 +201,44 @@ class ClayScene:
             if thing.kind == "bird":
                 bird = self.animator.pose(thing.id, thing.pose, now)
                 pose(figure, bird_parts(bird, _radius(thing)))
+            elif thing.kind == "egg" and broken:
+                place.setR(j.turn * amount)  # the pieces lie upright, however it rolled
             elif thing.kind == "egg":
+                # Have its broken pieces built ahead of time, so they're ready the moment it
+                # breaks (it's only shown broken for a second).
+                self._figure(
+                    ("egg", _radius(thing), "broken"),
+                    lambda thing=thing: BROKEN_EGG.figure(thing),
+                    BROKEN_EGG.step,
+                    "egg",
+                )
                 lowest = self._lowest[self._things[thing.id][0]]
                 roll = round(place.getR()) % 360
                 place.setZ(place.getZ() - _radius(thing) - lowest[roll])
+                if splat:  # flattened against the floor, its bottom staying put
+                    wide, tall = SPLAT
+                    sx, sy, sz = place.getScale()
+                    place.setScale(sx * wide, sy, sz * tall)
+                    place.setZ(place.getZ() - (1 - tall) * _radius(thing))
             elif thing.kind == "go":
                 place.setScale(place.getScale() * self._press(thing, frame))
             elif thing.kind == "blossom":
                 self._bed(thing, place, frame)
         for thing_id in set(self._things) - present:
             self._things.pop(thing_id)[1].removeNode()
-            for state in (self._beds, self._bloomed, self._pressed):
+            for state in (self._beds, self._bloomed, self._pressed, self._broke_at):
                 state.pop(thing_id, None)
         self.animator.forget(present)
 
-    def _node(self, thing: Thing, look: Look) -> tuple[NodePath, NodePath] | None:
+    def _node(
+        self, thing: Thing, look: Look, variant: str = ""
+    ) -> tuple[NodePath, NodePath] | None:
         """The thing's figure on the set, made the first time it's seen, or None while its
         figure is being built. A figure has a `place` (where the game puts it) and inside it
-        the figure itself."""
-        key = (thing.kind, _outline(thing) if thing.kind == "terrain" else _radius(thing))
+        the figure itself. A `variant` (a broken egg) is a different figure for the same
+        thing, swapped in for the old one."""
+        size = _outline(thing) if thing.kind == "terrain" else _radius(thing)
+        key = (thing.kind, size, variant)
         known = self._things.get(thing.id)
         if known is not None and known[0] == key:
             return known[1], known[2]

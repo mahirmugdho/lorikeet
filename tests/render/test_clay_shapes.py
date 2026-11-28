@@ -7,9 +7,13 @@ from lorikeet.render.clay.mesher import mesh_field
 from lorikeet.render.clay.shapes import (
     Coil,
     Coin,
+    Cracked,
+    Egg,
     Ellipsoid,
+    Placed,
     RoundCone,
     Scaled,
+    Shell,
     Slab,
     Torus,
     rotation,
@@ -174,3 +178,34 @@ def test_a_coin_is_flat_faced_with_a_rounded_rim():
     assert d[4] < 0
     corner = coin.distance(points((20, -3, 0)))[0]  # where a sharp edge would be
     assert corner == pytest.approx(2 * (2**0.5 - 1), abs=1e-3)  # rounded off
+
+
+def test_a_shell_is_a_thin_skin_of_its_shape():
+    ball = Ellipsoid((0, 0, 0), (10, 10, 10))
+    shell = Shell(ball, thickness=2)
+
+    d = shell.distance(points((10, 0, 0), (8, 0, 0), (9, 0, 0), (0, 0, 0)))
+
+    assert d[:2] == pytest.approx([0, 0], abs=1e-4)  # its outside and its inside
+    assert d[2] < 0  # in the skin
+    assert d[3] > 0  # hollow
+
+
+def test_a_cracked_egg_keeps_only_what_is_below_its_zigzag():
+    egg = Egg(28)
+    below = Cracked(egg, height=0.0, teeth=7, depth=4.0)
+    above = Cracked(egg, height=0.0, teeth=7, depth=4.0, above=True)
+
+    low, high = points((0, 0, -20)), points((0, 0, 20))
+    assert below.distance(low)[0] < 0 and below.distance(high)[0] > 0
+    assert above.distance(high)[0] < 0 and above.distance(low)[0] > 0
+
+
+def test_a_placed_shape_is_moved_and_turned():
+    rod = Ellipsoid((0, 0, 0), (4, 1, 1))
+    placed = Placed(rod, at=(10, 0, 0), turn=rotation(heading=90))
+
+    d = placed.distance(points((10, 4, 0), (14, 0, 0)))
+
+    assert d[0] == pytest.approx(0, abs=1e-4)  # now along y, round (10, 0, 0)
+    assert d[1] > 2

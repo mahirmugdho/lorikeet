@@ -258,6 +258,92 @@ class Coil:
 
 
 @dataclass(frozen=True)
+class Egg:
+    """An egg, as one shape: a big ball below blended into a smaller, taller one above, so
+    it's wider below and narrower above (`kinds.egg`). One shape, unlike pieces blended in
+    a figure, so it can be hollowed out and cracked (`Shell`, `Cracked`)."""
+
+    radius: float
+
+    def distance(self, p: np.ndarray) -> np.ndarray:
+        bottom, top, blend = egg_parts(self.radius)
+        return smooth_union(bottom.distance(p), top.distance(p), blend)
+
+    def bounds(self) -> tuple[np.ndarray, np.ndarray]:
+        r = self.radius
+        return np.array([-0.9 * r, -0.9 * r, -1.1 * r]), np.array([0.9 * r, 0.9 * r, 1.2 * r])
+
+
+def egg_parts(radius: float) -> tuple[Ellipsoid, Ellipsoid, float]:
+    """The egg's two balls and how softly they're blended (see `Egg`)."""
+    r = radius
+    bottom = Ellipsoid((0, 0, -0.2 * r), (0.86 * r, 0.84 * r, 0.84 * r))
+    top = Ellipsoid((0, 0, 0.34 * r), (0.6 * r, 0.6 * r, 0.76 * r))
+    return bottom, top, 0.5 * r
+
+
+@dataclass(frozen=True)
+class Shell:
+    """Another shape hollowed out, leaving a skin `thickness` thick: an eggshell."""
+
+    shape: Shape
+    thickness: float
+
+    def distance(self, p: np.ndarray) -> np.ndarray:
+        half = self.thickness / 2
+        return (np.abs(self.shape.distance(p) + half) - half).astype(np.float32)
+
+    def bounds(self) -> tuple[np.ndarray, np.ndarray]:
+        return self.shape.bounds()
+
+
+@dataclass(frozen=True)
+class Cracked:
+    """Another shape cracked across along a zigzag that runs round its z axis, keeping the
+    part below the crack (or above it, with `above`): half of a broken eggshell. The crack
+    runs at `height`, its zigzag going `depth` up and down, with `teeth` points round."""
+
+    shape: Shape
+    height: float
+    teeth: int
+    depth: float
+    above: bool = False
+
+    def distance(self, p: np.ndarray) -> np.ndarray:
+        around = np.arctan2(p[:, 1], p[:, 0]) / math.tau * self.teeth
+        zigzag = 2 * np.abs(around - np.floor(around) - 0.5)  # 0 to 1 and back, per tooth
+        crack = self.height + self.depth * (2 * zigzag - 1)
+        past = crack - p[:, 2] if self.above else p[:, 2] - crack
+        # The zigzag's sides slope, so straight up overstates the distance to the crack.
+        # Scaled down by the steepest slope (at the shape's narrowest part that matters),
+        # it never does, which is what the mesher needs.
+        reach = max(1e-3, float(np.min(self.shape.bounds()[1][:2])))
+        slope = 4 * self.depth * self.teeth / (math.tau * 0.5 * reach)
+        return np.maximum(self.shape.distance(p), past / math.hypot(1, slope)).astype(np.float32)
+
+    def bounds(self) -> tuple[np.ndarray, np.ndarray]:
+        return self.shape.bounds()
+
+
+@dataclass(frozen=True)
+class Placed:
+    """Another shape turned (`turn`, columns are its axes, as `rotation` makes them) and
+    moved so its origin is at `at`: a piece of a figure that has fallen somewhere else."""
+
+    shape: Shape
+    at: Vec3
+    turn: np.ndarray = field(default_factory=lambda: IDENTITY)
+
+    def distance(self, p: np.ndarray) -> np.ndarray:
+        return self.shape.distance((p - np.asarray(self.at, dtype=np.float32)) @ self.turn)
+
+    def bounds(self) -> tuple[np.ndarray, np.ndarray]:
+        low, high = self.shape.bounds()
+        reach = float(np.max(np.abs(np.stack([low, high]))))  # any turn stays inside this
+        return np.asarray(self.at) - reach, np.asarray(self.at) + reach
+
+
+@dataclass(frozen=True)
 class Scaled:
     """Another shape stretched or squashed along x, y and z about the origin.
 

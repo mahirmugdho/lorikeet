@@ -22,11 +22,16 @@ from lorikeet.render.clay.figure import Figure, Piece
 from lorikeet.render.clay.shapes import (
     Coil,
     Coin,
+    Cracked,
+    Egg,
     Ellipsoid,
+    Placed,
     RoundCone,
+    Shell,
     Slab,
     Torus,
     disc,
+    egg_parts,
     rotation,
     smooth_union,
 )
@@ -122,17 +127,10 @@ def egg(radius: float) -> Figure:
     axis along z (up, before the game turns it). As it rolls, the clay set lifts or lowers
     it a little so its lowest point stays where the ball's is (`scene.py`)."""
     r = radius
-    bottom = Ellipsoid((0, 0, -0.2 * r), (0.86 * r, 0.84 * r, 0.84 * r))
-    top = Ellipsoid((0, 0, 0.34 * r), (0.6 * r, 0.6 * r, 0.76 * r))
-    pieces = [Piece(bottom, "shell"), Piece(top, "shell", blend=0.5 * r)]
-    rng = np.random.default_rng(3)
-    for _ in range(11):
-        # Speckles on the side the camera sees (-y): the egg only turns in the wall's plane.
-        d = rng.normal(size=3) * [1, 0.45, 1.25] + [0, -1.1, 0]
-        d /= np.linalg.norm(d)
-        size = rng.uniform(0.05, 0.1) * r
-        at = _onto_egg(bottom, top, 0.5 * r, d)
-        pieces.append(Piece(disc(at, size, 0.035 * r, d), "speckle", 0.02 * r))
+    bottom, top, blend = egg_parts(r)
+    pieces = [Piece(bottom, "shell"), Piece(top, "shell", blend=blend)]
+    for speckle in _speckles(r):
+        pieces.append(Piece(speckle, "speckle", 0.02 * r))
     return Figure(
         tuple(pieces),
         {"shell": EGG_SHELL, "speckle": EGG_SPECKLE},
@@ -146,6 +144,21 @@ def egg(radius: float) -> Figure:
     )
 
 
+def _speckles(r: float) -> list[Ellipsoid]:
+    """The egg's speckles: small discs pressed into its shell on the side the camera sees
+    (-y; the egg only turns in the wall's plane). The same every time, so a broken egg's
+    halves have the speckles the whole egg had."""
+    bottom, top, blend = egg_parts(r)
+    rng = np.random.default_rng(3)
+    speckles = []
+    for _ in range(11):
+        d = rng.normal(size=3) * [1, 0.45, 1.25] + [0, -1.1, 0]
+        d /= np.linalg.norm(d)
+        size = rng.uniform(0.05, 0.1) * r
+        speckles.append(disc(_onto_egg(bottom, top, blend, d), size, 0.035 * r, d))
+    return speckles
+
+
 def _onto_egg(bottom: Ellipsoid, top: Ellipsoid, blend: float, direction) -> np.ndarray:
     """Where a ray from the egg's middle along `direction` meets its surface."""
     near, far = 0.0, 2.0 * max(bottom.radii)
@@ -155,6 +168,53 @@ def _onto_egg(bottom: Ellipsoid, top: Ellipsoid, blend: float, direction) -> np.
         inside = smooth_union(bottom.distance(p), top.distance(p), blend)[0] < 0
         near, far = (mid, far) if inside else (near, mid)
     return np.asarray(direction) * near
+
+
+EGG_WHITE, YOLK = (246, 242, 230), (222, 196, 148)
+"""A broken egg's puddle. The yolk is muted, well short of a yellow note's colour, so the
+camera never takes it for one."""
+
+
+def broken_egg(radius: float) -> Figure:
+    """The egg after it lands on the floor: its shell (hollow, now you can see it) cracked
+    round the middle along a zigzag, the bottom half still standing where the egg was, the
+    top half tipped over on its side to the right, and a little puddle of egg round them on
+    the ground (the bottom of the egg's circle). Swapped in for the egg as it breaks."""
+    r = radius
+    shell = Shell(Egg(r), thickness=0.12 * r)
+    crack = {"height": 0.04 * r, "teeth": 7, "depth": 0.13 * r}
+    bottom = Cracked(shell, **crack)
+    # Tipped over: its dome turned to point right and a touch down, resting on the ground.
+    tipped = {"at": (1.3 * r, 0.0, -0.1 * r), "turn": rotation(pitch=-100)}
+    top = Placed(Cracked(shell, above=True, **crack), **tipped)
+    pieces = [
+        Piece(Ellipsoid((0.3 * r, -0.05 * r, -r), (1.5 * r, 0.5 * r, 0.08 * r)), "white"),
+        Piece(
+            Ellipsoid((0.75 * r, -0.2 * r, -0.94 * r), (0.32 * r, 0.26 * r, 0.13 * r)),
+            "yolk",
+            blend=0.04 * r,
+        ),
+        Piece(bottom, "shell", blend=0.03 * r),
+        Piece(top, "shell", blend=0.03 * r),
+    ]
+    # The whole egg's speckles, each on the half it was on (clear of the crack's zigzag).
+    for speckle in _speckles(r):
+        height = speckle.centre[2]
+        if height < crack["height"] - crack["depth"] - 0.05 * r:
+            pieces.append(Piece(speckle, "speckle", 0.02 * r))
+        elif height > crack["height"] + crack["depth"] + 0.05 * r:
+            pieces.append(Piece(Placed(speckle, **tipped), "speckle", 0.02 * r))
+    return Figure(
+        tuple(pieces),
+        {"white": EGG_WHITE, "yolk": YOLK, "shell": EGG_SHELL, "speckle": EGG_SPECKLE},
+        lump_height=0.4,
+        lump_size=9.0,
+        seam_depth=0.2,
+        seam_width=0.4,
+        mottle=0.05,
+        mottle_size=8.0,
+        seed=2,
+    )
 
 
 GO_DISC, GO_LETTERS = (152, 144, 132), (76, 66, 58)
