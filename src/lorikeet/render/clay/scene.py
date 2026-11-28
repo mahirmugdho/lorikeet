@@ -187,6 +187,7 @@ class ClayScene:
         """Every thing's figure goes under here, so they can be hidden together (`hold`)."""
         self.missing = 0
         """How many things in the last View weren't on the set, still being built."""
+        self._asked: set[Hashable] = set()  # every figure the View's things have needed
         self.builder: Builds = builder if builder is not None else BuildNow()
         self._new_per_frame = new_per_frame
         self._new = 0  # newly built figures let in this frame
@@ -318,10 +319,15 @@ class ClayScene:
         step: float,
         name: str,
         small: bool = False,
+        counted: bool = True,
     ) -> NodePath | None:
         """A built figure to copy onto the set, or None while it's being built. A `small`
         one (a letter) is quick to load onto the graphics card, so it doesn't wait its turn
-        behind the big figures (`new_per_frame`): a few of them come each frame alongside."""
+        behind the big figures (`new_per_frame`): a few of them come each frame alongside.
+        `counted` figures are needed by what's on the View now (not built ahead), and count
+        towards `progress`."""
+        if counted:
+            self._asked.add(key)
         if key in self._figures:
             return self._figures[key]
         if self._new_per_frame:
@@ -341,16 +347,25 @@ class ClayScene:
             self._new += 1
         return self._figures[key]
 
-    def _letter(self, char: str) -> NodePath | None:
+    def _letter(self, char: str, counted: bool = True) -> NodePath | None:
         return self._figure(
-            ("letter", char), lambda: glyph(char), LETTER_STEP, "letter", small=True
+            ("letter", char), lambda: glyph(char), LETTER_STEP, "letter", True, counted
         )
+
+    def progress(self) -> float:
+        """How much of what the View's things have needed so far is built, 0 to 1: every
+        figure and letter counts the same."""
+        if not self._asked:
+            return 1.0
+        return sum(key in self._figures for key in self._asked) / len(self._asked)
 
     def _prefetch_font(self) -> None:
         """Have every letter built, from the first frame: words the game shows later (the
         win message) are then ready when they're needed."""
         if not self._font_ready:
-            self._font_ready = all([self._letter(char) is not None for char in LETTERS])
+            self._font_ready = all(
+                [self._letter(char, counted=False) is not None for char in LETTERS]
+            )
 
     def _words(self, thing: Thing, text: Text, frame: int) -> None:
         """A Text thing in clay letters, stuck onto the backdrop, centred on its position.

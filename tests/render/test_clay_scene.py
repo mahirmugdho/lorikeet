@@ -256,3 +256,14 @@ def test_words_are_written_in_clay_letters_on_the_backdrop_centred_where_the_vie
     across = [letter.getX() for letter in letters]
     assert across == sorted(across)  # left to right
     assert (across[0] + across[-1]) / 2 == pytest.approx(0, abs=12)  # about centred
+
+
+def test_progress_is_the_share_of_needed_figures_that_are_built(clay):
+    clay.builder = Slow()
+    things = (Thing(4, "bird", Circle(34), (100, 80)), Thing(5, "bird", Circle(20), (200, 80)))
+
+    clay.show(View(things), now=0.0)
+    assert clay.progress() == 0.0
+    clay.show(View(things), now=0.02)
+    clay.show(View(things), now=0.04)
+    assert clay.progress() == 1.0

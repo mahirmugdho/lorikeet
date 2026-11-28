@@ -10,7 +10,9 @@ game's View, the wall and the overlay layer each frame, and it owns its window. 
   where the View says, posed and boiled at 12 frames a second (`motion.py`).
 - **Figures are built in the background** (`builder.py`), so the first egg doesn't freeze the
   game while it's built. Until a figure is ready its thing is left out. At startup the whole
-  set is held out of sight until it's all there, then shown at once (`loading.py`).
+  set is held out of sight until it's all there, then shown at once (`loading.py`), with a
+  loading screen of pre-rendered clay meanwhile if that takes a moment
+  (`loading_screen.py`).
 - **The canvas.** The set is drawn into an offscreen picture the canvas's own size (projector
   pixels, with 8x anti-aliasing), then the wall and the overlay layer go on top of it, in
   that order. (The game's words are clay letters on the set itself: `clayfont.py`.) The
@@ -51,23 +53,20 @@ from panda3d.core import (
 
 from lorikeet.render.clay.builder import Builder
 from lorikeet.render.clay.cache import detail
-from lorikeet.render.clay.loading import WORDS as LOADING_WORDS
 from lorikeet.render.clay.loading import Loading
+from lorikeet.render.clay.loading_screen import LoadingScreen
 from lorikeet.render.clay.mirror import FLIPPED, Mirror
+from lorikeet.render.clay.motion import frame_of
 from lorikeet.render.clay.scene import ClayScene
 from lorikeet.render.clay.stage import Light, Stage
 from lorikeet.render.clay.window import fit, letterbox, monitors, pygame_key, pygame_settings
-from lorikeet.render.clay.words import Words
-from lorikeet.view import Text, Thing, View
+from lorikeet.view import View
 
 TITLE = "Lorikeet"
 LETTERBOX = (60 / 255, 58 / 255, 54 / 255, 1.0)
 """Behind the canvas where the window's shape doesn't match it (as in the desk window)."""
 
 MULTISAMPLES = 8
-
-LOADING_ID = -1
-"""The thing id "Loading…" is written under: one no game uses."""
 
 
 class ClayRenderer:
@@ -114,10 +113,11 @@ class ClayRenderer:
         )
         self._builder = Builder()
         self._scene = ClayScene(stage, self._builder, new_per_frame=1, prefetch_font=True)
-        self._words = Words(layer2d, size)
-        self._words_root = layer2d
-        # On top of the set, in order: the words, then the wall (the picture lands on the
-        # paper), then the overlay layer.
+        self._loading_screen = LoadingScreen(layer2d, size)
+        self._loading_screen_root = layer2d.find("loading screen")
+        self._loading_screen_root.setBin("fixed", 10)
+        # On top of the set, in order: the loading screen (while there is one), then the
+        # wall (the picture lands on the paper), then the overlay layer.
         self._wall = Mirror("wall", size, every=4)
         wall_card = stage.wall_layer()
         wall_card.setTexture(self._wall.texture)
@@ -142,10 +142,6 @@ class ClayRenderer:
         self._started = time.monotonic()
         self._loading = Loading(self._started)
         self._scene.hold(True)  # until it has all loaded
-        width, height = size
-        self._loading_words = View(
-            (Thing(LOADING_ID, "hint", Text(LOADING_WORDS, 40), (width / 2, height / 2)),)
-        )
         self._frames: list[float] = []
 
     @property
@@ -162,14 +158,10 @@ class ClayRenderer:
         now = time.monotonic()
         self._frames.append(now)
         self._scene.show(view, now - self._started)
-        holding, word = self._loading.step(self._scene.missing, now)
-        self._scene.hold(holding)
-        # The game's words are clay, on the set (`scene.py`); this ink is only for
-        # "Loading…", written while the clay (letters included) is still arriving.
-        self._words.show(self._loading_words if holding and word else View(), 0)
-        for card in self._words_root.getChildren():
-            if card.getName().startswith("words"):
-                card.setBin("fixed", 10)
+        progress = self._loading.step(self._scene.missing, now, self._scene.progress())
+        self._scene.hold(progress.holding)
+        # Pictures rendered ahead of time (`loading_art.py`): nothing to load itself.
+        self._loading_screen.show(progress.screen, progress.beads, frame_of(now - self._started))
         self._wall.update(wall)
         self._layer.update(layer)
         if self._layer.empty:
