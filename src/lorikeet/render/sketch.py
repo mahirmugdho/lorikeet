@@ -21,6 +21,7 @@ import pygame
 
 from lorikeet.interface import Point, Polygon
 from lorikeet.render.flat import FlatRenderer
+from lorikeet.render.flat_looks import broken_shell
 from lorikeet.render.pencil import (
     PENCIL,
     around,
@@ -81,12 +82,29 @@ class SketchLooks:
         pencil_outline(canvas, points, rng)
 
     def _egg(self, canvas: pygame.Surface, thing: Thing, rng: random.Random) -> None:
+        if thing.pose == "broken":
+            self._broken_egg(canvas, thing, rng)
+            return
         (x, y), r = thing.position, _radius(thing)
         pygame.draw.circle(canvas, WASHES["egg"], (x, y), r)
         pencil_loop(canvas, (x, y), r, rng)
         # A speckle that turns with the egg, so you can see it roll.
         speckle = (x + 0.45 * r * math.cos(thing.angle), y + 0.45 * r * math.sin(thing.angle))
         pygame.draw.circle(canvas, PENCIL, speckle, 0.12 * r)
+
+    def _broken_egg(self, canvas: pygame.Surface, thing: Thing, rng: random.Random) -> None:
+        """The flat look's broken egg (`flat_looks.broken_shell`) in pencil and wash: two
+        cracked halves, and a quick loop round the puddle they lie in."""
+        (x, _), r = thing.position, _radius(thing)
+        bottom, cap, floor = broken_shell(thing.position, r)
+        _loop(canvas, (x + 0.25 * r, floor - 0.08 * r), 1.35 * r, 0.1 * r, rng)
+        for half in (bottom, cap):
+            pygame.draw.polygon(canvas, WASHES["egg"], half)
+            # One wobbly line all the way round: the crack's zigzag is too many short edges
+            # for strokes that run past their ends, which would cross like stitches.
+            pygame.draw.lines(
+                canvas, PENCIL, True, jittered(tuple(half), rng, amount=1.0, steps=1), 2
+            )
 
     def _nest(self, canvas: pygame.Surface, thing: Thing, rng: random.Random) -> None:
         """A bowl's front wall, as in the flat look: from the rim's front edge down to the
