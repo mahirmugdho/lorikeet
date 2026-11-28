@@ -1,6 +1,6 @@
 # 0009. Draw the clay look with Panda3D
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-28
 - **Deciders:** Ryan, Mahir
 
