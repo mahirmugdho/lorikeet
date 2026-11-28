@@ -20,7 +20,7 @@ from lorikeet.render.clay.figure import Figure, Piece, build
 from lorikeet.render.clay.scene import LAYER_DEPTH, ClayScene, Look
 from lorikeet.render.clay.shapes import Ellipsoid
 from lorikeet.render.clay.stage import SEEN, Light, Stage
-from lorikeet.view import Circle, Outline, Thing, View
+from lorikeet.view import Circle, Outline, Text, Thing, View
 
 
 def ball(thing: Thing) -> Figure:
@@ -241,3 +241,18 @@ def test_holding_hides_every_thing_but_not_the_backdrop(clay):
     assert not clay.stage.backdrop.isHidden()
     clay.hold(False)
     assert not placed(clay, "bird 4").isHidden()
+
+
+def test_words_are_written_in_clay_letters_on_the_backdrop_centred_where_the_view_says(clay):
+    words = Thing(6, "hint", Text("Go on!", 40), (160, 30), layer=4)
+    clay.show(View((words,)), now=0.0)
+
+    place = placed(clay, "hint 6")
+    letters = place.getChildren()
+    assert len(letters) == 5  # "Go on!" without its space
+    x, depth, z = place.getPos()
+    assert (x, z) == pytest.approx((160, -30))
+    assert depth > 30  # back against the backdrop
+    across = [letter.getX() for letter in letters]
+    assert across == sorted(across)  # left to right
+    assert (across[0] + across[-1]) / 2 == pytest.approx(0, abs=12)  # about centred

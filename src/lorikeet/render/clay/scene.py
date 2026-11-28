@@ -25,7 +25,8 @@ How a thing's View maps onto the set:
 - **The go disc** is pressed onto the backdrop where the go note goes, and gives a little
   as the note goes on.
 - **The blossom** is a bed of flowers that blooms when the egg gets there (`bed.py`).
-- The View's words are written by the renderer (`words.py`), not here.
+- **Words** (the View's Text things) are written in clay letters stuck onto the backdrop
+  (`clayfont.py`): each letter is built once and copied, and each jitters on its own.
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ from panda3d.core import LMatrix4f, NodePath, PTA_LVecBase3f, TransformState
 from lorikeet.render.clay.bed import CENTRES, FLOWERS, PETALS, flower_state
 from lorikeet.render.clay.breaking import puddle, top_half
 from lorikeet.render.clay.builder import BuildNow, Builds
+from lorikeet.render.clay.clayfont import LETTERS, ROPE, X_HEIGHT, glyph, layout
 from lorikeet.render.clay.colour import linear
 from lorikeet.render.clay.coords import heading, to_world
 from lorikeet.render.clay.figure import MAX_CLAYS, ClayMesh, Figure, Packed
@@ -60,7 +62,7 @@ from lorikeet.render.clay.lori import lori
 from lorikeet.render.clay.motion import Animator, bird_parts, frame_of, jitter
 from lorikeet.render.clay.rope import rope
 from lorikeet.render.clay.stage import BACKDROP_DEPTH, Stage, figure_node, pose, shadow_box
-from lorikeet.view import Circle, Outline, Thing, View
+from lorikeet.view import Circle, Outline, Text, Thing, View
 
 LAYER_DEPTH = 6.0
 """How much further forward each layer stands, in pixels. Small, so everything stays close
@@ -84,6 +86,18 @@ GO_PRESS = (0.94, 1.04)
 HEAD_SIZE, STEM_LENGTH = 0.9, 1.0
 """What the bed's flower heads and stems are built at, as a share of the bed's radius; each
 flower is scaled from there (`bed.FLOWERS`)."""
+
+LETTER_STEP = 0.75
+"""The mesh step for clay letters, in pixels at their built size: fine enough for round
+ropes, coarse enough that a screenful of words stays light on the graphics card."""
+SOFT_LETTERS = (128, 118, 106)
+"""Hints are written in a lighter clay than messages, as the flat looks use a softer ink."""
+TEXT_XHEIGHT = 0.45
+"""A Text's x-height, as a share of its `size` (as for a printed font)."""
+SMALL_PER_FRAME = 6
+"""How many small figures (letters) can join the set in a frame, for each big one."""
+LETTER_JITTER = 0.5
+"""How far each letter jitters each stop-motion frame, in pixels."""
 
 TIPPED = {"bird": LORI_TURN[1], "nest": LORI_TURN[1]}
 """Figures tipped towards the camera, as if seen from slightly above, in degrees. The nest
@@ -154,12 +168,20 @@ LOOKS = {
 
 
 class ClayScene:
-    def __init__(self, stage: Stage, builder: Builds | None = None, new_per_frame: int = 0) -> None:
+    def __init__(
+        self,
+        stage: Stage,
+        builder: Builds | None = None,
+        new_per_frame: int = 0,
+        prefetch_font: bool = False,
+    ) -> None:
         """`builder` makes the figures: built on the spot unless given (see `builder.py`).
         `new_per_frame` limits how many newly built figures join the set in one frame (0: no
         limit). Each has to be loaded onto the graphics card, which for a big one (Lori, a
         ledge) takes some milliseconds, so in a live window they're let in one a frame,
-        rather than several landing in the same frame and making it late."""
+        rather than several landing in the same frame and making it late. With
+        `prefetch_font`, every letter is built from the start, not just those the words on
+        screen need (for a live window, so later words are ready in time)."""
         self.stage = stage
         self.things = stage.root.attachNewNode("things")
         """Every thing's figure goes under here, so they can be hidden together (`hold`)."""
@@ -168,6 +190,7 @@ class ClayScene:
         self.builder: Builds = builder if builder is not None else BuildNow()
         self._new_per_frame = new_per_frame
         self._new = 0  # newly built figures let in this frame
+        self._new_small = 0  # and small ones (letters)
         self.animator = Animator()
         self._things: dict[
             int, tuple[object, NodePath, NodePath]
@@ -179,14 +202,20 @@ class ClayScene:
         self._pressed: dict[int, tuple[str, int]] = {}  # go id -> (pose, frame it began)
         self._broke_at: dict[int, int] = {}  # egg id -> the frame it broke
         self._breaks: dict[int, tuple[NodePath, NodePath]] = {}  # egg id -> top half, puddle
+        self._font_ready = not prefetch_font  # whether every letter wanted is built
 
     def show(self, view: View, now: float) -> None:
         """Bring the set up to date with `view`, at game time `now` (seconds)."""
         frame = frame_of(now)
         present = set()
-        self._new = 0
+        self._new = self._new_small = 0
         self.missing = 0
+        self._prefetch_font()
         for thing in view.things:
+            if isinstance(thing.shape, Text):
+                present.add(thing.id)
+                self._words(thing, thing.shape, frame)
+                continue
             if thing.kind == "note":
                 present.add(thing.id)
                 self._note(thing, frame)
@@ -283,21 +312,85 @@ class ClayScene:
             self.things.show()
 
     def _figure(
-        self, key: Hashable, recipe: Callable[[], Figure], step: float, name: str
+        self,
+        key: Hashable,
+        recipe: Callable[[], Figure],
+        step: float,
+        name: str,
+        small: bool = False,
     ) -> NodePath | None:
-        """A built figure to copy onto the set, or None while it's being built."""
+        """A built figure to copy onto the set, or None while it's being built. A `small`
+        one (a letter) is quick to load onto the graphics card, so it doesn't wait its turn
+        behind the big figures (`new_per_frame`): a few of them come each frame alongside."""
         if key in self._figures:
             return self._figures[key]
-        if self._new_per_frame and self._new >= self._new_per_frame:
-            return None  # enough new figures this frame: this one can come next frame
+        if self._new_per_frame:
+            if small and self._new_small >= SMALL_PER_FRAME * self._new_per_frame:
+                return None
+            if not small and self._new >= self._new_per_frame:
+                return None  # enough new figures this frame: this one can come next frame
         mesh = self.builder.mesh(key, recipe, step)
         if mesh is None:
             return None
         self._figures[key] = figure_node(mesh, name)
         if name == "egg":
             self._lowest[key] = _lowest_per_degree(mesh)
-        self._new += 1
+        if small:
+            self._new_small += 1
+        else:
+            self._new += 1
         return self._figures[key]
+
+    def _letter(self, char: str) -> NodePath | None:
+        return self._figure(
+            ("letter", char), lambda: glyph(char), LETTER_STEP, "letter", small=True
+        )
+
+    def _prefetch_font(self) -> None:
+        """Have every letter built, from the first frame: words the game shows later (the
+        win message) are then ready when they're needed."""
+        if not self._font_ready:
+            self._font_ready = all([self._letter(char) is not None for char in LETTERS])
+
+    def _words(self, thing: Thing, text: Text, frame: int) -> None:
+        """A Text thing in clay letters, stuck onto the backdrop, centred on its position.
+        Hidden until all its letters are built, so it never shows half written."""
+        key = ("words", text.text, round(text.size), thing.kind)
+        known = self._things.get(thing.id)
+        if known is None or known[0] != key:
+            letters = {char: self._letter(char) for char, _ in layout(text.text)[0]}
+            if any(built is None for built in letters.values()):
+                self.missing += 1
+                return  # any old words stay up until the new ones' letters are built
+            if known is not None:
+                known[1].removeNode()
+            place = self.things.attachNewNode(f"{thing.kind} {thing.id}")
+            scale = TEXT_XHEIGHT * text.size / X_HEIGHT
+            placed, length = layout(text.text)
+            colour = _palette(SOFT_LETTERS) if thing.kind == "hint" else None
+            for i, (char, x) in enumerate(placed):
+                built = letters[char]
+                assert built is not None
+                holder = place.attachNewNode(f"letter {i}")
+                holder.setPythonTag(
+                    "at", ((x - length / 2) * X_HEIGHT * scale, -0.6 * X_HEIGHT * scale)
+                )
+                holder.setScale(scale)
+                piece = built.copyTo(holder)
+                if colour is not None:
+                    piece.setShaderInput("palette", colour)
+                holder.setShaderInput("boil_amount", 0.25)
+            self._things[thing.id] = (key, place, place)
+        _, place, _ = self._things[thing.id]
+        scale = TEXT_XHEIGHT * text.size / X_HEIGHT
+        # On the backdrop: the letters' backs just touching it.
+        place.setPos(*to_world(thing.position, BACKDROP_DEPTH - ROPE * X_HEIGHT * scale - 0.5))
+        for i, holder in enumerate(place.getChildren()):
+            x, z = holder.getPythonTag("at")
+            j = jitter(thing.id * 131 + i, frame)
+            holder.setPos(x + j.dx * LETTER_JITTER, 0, z - j.dy * LETTER_JITTER)
+            holder.setR(j.turn * 2)
+            holder.setShaderInput("boil_seed", float(frame) + thing.id * 0.618 + i * 1.7)
 
     def _press(self, thing: Thing, frame: int) -> float:
         """How big the go disc is this frame: it gives a little as the go note goes on."""

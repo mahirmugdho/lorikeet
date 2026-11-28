@@ -12,10 +12,11 @@ game's View, the wall and the overlay layer each frame, and it owns its window. 
   game while it's built. Until a figure is ready its thing is left out. At startup the whole
   set is held out of sight until it's all there, then shown at once (`loading.py`).
 - **The canvas.** The set is drawn into an offscreen picture the canvas's own size (projector
-  pixels, with 8x anti-aliasing), then the words, the wall and the overlay layer go on top of
-  it, in that order. The window just shows the finished picture, stretched to fill it. So the
-  set costs the same however big the window is, even where the desktop gives an X11 window
-  2.25 times the projector's pixels (Panda3D draws through X11 on Linux).
+  pixels, with 8x anti-aliasing), then the wall and the overlay layer go on top of it, in
+  that order. (The game's words are clay letters on the set itself: `clayfont.py`.) The
+  window just shows the finished picture, stretched to fill it. So the set costs the same
+  however big the window is, even where the desktop gives an X11 window 2.25 times the
+  projector's pixels (Panda3D draws through X11 on Linux).
 - **Input.** The launcher speaks pygame; this window is Panda3D's. Its keys and its close
   button are turned into pygame events (`events`). F shows Panda3D's frame-rate meter.
 - **Frame times.** On closing, it prints the average, 95th percentile and worst time between
@@ -53,7 +54,6 @@ from lorikeet.render.clay.cache import detail
 from lorikeet.render.clay.loading import WORDS as LOADING_WORDS
 from lorikeet.render.clay.loading import Loading
 from lorikeet.render.clay.mirror import FLIPPED, Mirror
-from lorikeet.render.clay.motion import frame_of
 from lorikeet.render.clay.scene import ClayScene
 from lorikeet.render.clay.stage import Light, Stage
 from lorikeet.render.clay.window import fit, letterbox, monitors, pygame_key, pygame_settings
@@ -113,7 +113,7 @@ class ClayRenderer:
             Light(),
         )
         self._builder = Builder()
-        self._scene = ClayScene(stage, self._builder, new_per_frame=1)
+        self._scene = ClayScene(stage, self._builder, new_per_frame=1, prefetch_font=True)
         self._words = Words(layer2d, size)
         self._words_root = layer2d
         # On top of the set, in order: the words, then the wall (the picture lands on the
@@ -164,10 +164,9 @@ class ClayRenderer:
         self._scene.show(view, now - self._started)
         holding, word = self._loading.step(self._scene.missing, now)
         self._scene.hold(holding)
-        if holding:  # the game's own words wait too, with the set
-            self._words.show(self._loading_words if word else View(), 0)
-        else:
-            self._words.show(view, frame_of(now - self._started))
+        # The game's words are clay, on the set (`scene.py`); this ink is only for
+        # "Loading…", written while the clay (letters included) is still arriving.
+        self._words.show(self._loading_words if holding and word else View(), 0)
         for card in self._words_root.getChildren():
             if card.getName().startswith("words"):
                 card.setBin("fixed", 10)
