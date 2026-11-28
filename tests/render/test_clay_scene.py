@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from panda3d.core import Camera, NodePath
+from panda3d.core import Camera, Mat4, NodePath
 
 import lorikeet.render.clay.scene as scene_module
 from lorikeet.render.clay.bed import FLOWERS
@@ -103,14 +103,14 @@ def test_things_that_leave_the_view_leave_the_set(clay):
     clay.show(View((lori,)), now=0.0)
     clay.show(View(()), now=0.1)
 
-    assert clay.stage.root.find("bird 4").isEmpty()
+    assert clay.stage.root.find("**/bird 4").isEmpty()
 
 
 def test_kinds_without_a_clay_look_are_left_out(clay):
     words = Thing(5, "message", Circle(10), (10, 10))
     clay.show(View((words,)), now=0.0)
 
-    assert clay.stage.root.find("message 5").isEmpty()
+    assert clay.stage.root.find("**/message 5").isEmpty()
 
 
 class Slow:
@@ -212,3 +212,32 @@ def test_a_broken_egg_splats_flat_for_a_frame_then_lies_in_pieces(clay, monkeypa
     pieces = placed(clay, "egg 1000")
     assert (pieces.getSx(), pieces.getSz()) == pytest.approx((1.0, 1.0))
     assert pieces.getR() == pytest.approx(0.0)  # lying upright, however it rolled
+    lid, pool = placed(clay, "top half"), placed(clay, "puddle")
+    assert lid.getMat().almostEqual(Mat4.identMat())  # first the crack shows...
+    assert pool.isHidden()
+
+    clay.show(View((broken,)), now=10 / 12 + 0.001)  # later
+    assert lid.getX() > 2  # ...then the top half has tipped over to the right
+    assert not pool.isHidden()  # and the puddle has spread
+
+
+def test_the_set_counts_what_is_still_being_built(clay):
+    clay.builder = Slow()
+    lori = Thing(4, "bird", Circle(34), (100, 80), pose="idle")
+
+    clay.show(View((lori,)), now=0.0)
+    assert clay.missing == 1
+    clay.show(View((lori,)), now=0.02)
+    clay.show(View((lori,)), now=0.04)
+    assert clay.missing == 0
+
+
+def test_holding_hides_every_thing_but_not_the_backdrop(clay):
+    lori = Thing(4, "bird", Circle(34), (100, 80), pose="idle")
+    clay.show(View((lori,)), now=0.0)
+
+    clay.hold(True)
+    assert placed(clay, "bird 4").isHidden()
+    assert not clay.stage.backdrop.isHidden()
+    clay.hold(False)
+    assert not placed(clay, "bird 4").isHidden()

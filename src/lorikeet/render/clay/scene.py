@@ -12,8 +12,9 @@ How a thing's View maps onto the set:
 - **Turn.** The thing's angle turns its figure in the wall's plane. The egg tumbles as it
   rolls; it's egg-shaped but the game rolls a ball, so it's lifted or lowered a little to
   keep its lowest point where the ball's is, and it rocks along the ground like an egg.
-  When it breaks (pose "broken"), it squashes flat for one stop-motion frame, then the
-  broken egg is swapped in (`kinds.broken_egg`): two cracked halves in a puddle.
+  When it breaks (pose "broken"), it squashes flat for one stop-motion frame, then it's
+  swapped for its broken pieces, which play out the break (`breaking.py`): the crack
+  shows, the top half tips over beside the bottom one, and the puddle spreads.
 - **Stop-motion** (see `motion.py`). Positions and turns from the game stay smooth at the
   full frame rate. On top, each figure gets its tiny per-frame jitter, and its clay boils,
   12 times a second. Ledges don't jitter (they're the physics' ground, and a set is glued
@@ -33,9 +34,10 @@ from collections.abc import Callable, Hashable
 from dataclasses import dataclass
 
 import numpy as np
-from panda3d.core import NodePath, PTA_LVecBase3f, TransformState
+from panda3d.core import LMatrix4f, NodePath, PTA_LVecBase3f, TransformState
 
 from lorikeet.render.clay.bed import CENTRES, FLOWERS, PETALS, flower_state
+from lorikeet.render.clay.breaking import puddle, top_half
 from lorikeet.render.clay.builder import BuildNow, Builds
 from lorikeet.render.clay.colour import linear
 from lorikeet.render.clay.coords import heading, to_world
@@ -44,8 +46,10 @@ from lorikeet.render.clay.kinds import (
     FLOWER_STAGES,
     GO_THICKNESS,
     bed_leaves,
-    broken_egg,
     egg,
+    egg_bottom,
+    egg_puddle,
+    egg_top,
     flower_head,
     go_disc,
     ledge,
@@ -116,8 +120,15 @@ def _outline(thing: Thing) -> tuple[tuple[float, float], ...]:
     return ((-r, -r), (r, -r), (r, r), (-r, r))
 
 
-BROKEN_EGG = Look(lambda t: broken_egg(_radius(t)), step=0.6, boil=0.3, jitter=0.4)
-"""The egg once it's broken (see `ClayScene.show`)."""
+BROKEN_EGG = Look(lambda t: egg_bottom(_radius(t)), step=0.6, boil=0.3, jitter=0.4)
+"""The egg once it's broken: its bottom half is its figure, and its top half and puddle
+are added round it (`ClayScene._breaking`)."""
+
+BROKEN_PIECES = {
+    "top": (egg_top, 0.6),
+    "puddle": (egg_puddle, 0.6),
+}
+"""The rest of a broken egg: each piece's recipe and grid step."""
 
 LOOKS = {
     "bird": Look(lambda t: lori(_radius(t)), step=1.0, boil=0.6, jitter=1.0),
@@ -150,6 +161,10 @@ class ClayScene:
         ledge) takes some milliseconds, so in a live window they're let in one a frame,
         rather than several landing in the same frame and making it late."""
         self.stage = stage
+        self.things = stage.root.attachNewNode("things")
+        """Every thing's figure goes under here, so they can be hidden together (`hold`)."""
+        self.missing = 0
+        """How many things in the last View weren't on the set, still being built."""
         self.builder: Builds = builder if builder is not None else BuildNow()
         self._new_per_frame = new_per_frame
         self._new = 0  # newly built figures let in this frame
@@ -163,12 +178,14 @@ class ClayScene:
         self._bloomed: dict[int, int] = {}  # bed id -> the frame it started blooming
         self._pressed: dict[int, tuple[str, int]] = {}  # go id -> (pose, frame it began)
         self._broke_at: dict[int, int] = {}  # egg id -> the frame it broke
+        self._breaks: dict[int, tuple[NodePath, NodePath]] = {}  # egg id -> top half, puddle
 
     def show(self, view: View, now: float) -> None:
         """Bring the set up to date with `view`, at game time `now` (seconds)."""
         frame = frame_of(now)
         present = set()
         self._new = 0
+        self.missing = 0
         for thing in view.things:
             if thing.kind == "note":
                 present.add(thing.id)
@@ -179,13 +196,15 @@ class ClayScene:
                 continue
             present.add(thing.id)
             splat = broken = False
+            since = 0  # stop-motion frames since it broke
             if thing.kind == "egg" and thing.pose == "broken":
-                broke = self._broke_at.setdefault(thing.id, frame)
-                splat, broken = frame == broke, frame > broke
+                since = frame - self._broke_at.setdefault(thing.id, frame)
+                splat, broken = since == 0, since > 0
                 if broken:
                     look = BROKEN_EGG
             node = self._node(thing, look, "broken" if broken else "")
             if node is None:
+                self.missing += 1
                 continue  # its figure is still being built: it joins the set when ready
             place, figure = node
             j = jitter(thing.id, frame)
@@ -203,15 +222,11 @@ class ClayScene:
                 pose(figure, bird_parts(bird, _radius(thing)))
             elif thing.kind == "egg" and broken:
                 place.setR(j.turn * amount)  # the pieces lie upright, however it rolled
+                self._breaking(thing, place, frame, since)
             elif thing.kind == "egg":
                 # Have its broken pieces built ahead of time, so they're ready the moment it
                 # breaks (it's only shown broken for a second).
-                self._figure(
-                    ("egg", _radius(thing), "broken"),
-                    lambda thing=thing: BROKEN_EGG.figure(thing),
-                    BROKEN_EGG.step,
-                    "egg",
-                )
+                self._broken_pieces(thing)
                 lowest = self._lowest[self._things[thing.id][0]]
                 roll = round(place.getR()) % 360
                 place.setZ(place.getZ() - _radius(thing) - lowest[roll])
@@ -226,7 +241,7 @@ class ClayScene:
                 self._bed(thing, place, frame)
         for thing_id in set(self._things) - present:
             self._things.pop(thing_id)[1].removeNode()
-            for state in (self._beds, self._bloomed, self._pressed, self._broke_at):
+            for state in (self._beds, self._bloomed, self._pressed, self._broke_at, self._breaks):
                 state.pop(thing_id, None)
         self.animator.forget(present)
 
@@ -247,7 +262,7 @@ class ClayScene:
         built = self._figure(key, lambda: look.figure(thing), look.step, thing.kind)
         if built is None:
             return None
-        place = self.stage.root.attachNewNode(f"{thing.kind} {thing.id}")
+        place = self.things.attachNewNode(f"{thing.kind} {thing.id}")
         holder = place
         if thing.kind in TIPPED:
             holder = place.attachNewNode("tilt")
@@ -258,6 +273,14 @@ class ClayScene:
             figure.setH(LORI_TURN[0])
         self._things[thing.id] = (key, place, figure)
         return place, figure
+
+    def hold(self, holding: bool) -> None:
+        """Hide every thing on the set (the backdrop stays), or show them again: so the set
+        can be filled in out of sight while it loads, then shown all at once."""
+        if holding:
+            self.things.hide()
+        else:
+            self.things.show()
 
     def _figure(
         self, key: Hashable, recipe: Callable[[], Figure], step: float, name: str
@@ -304,6 +327,7 @@ class ClayScene:
             ]
             if stems is None or any(head is None for head in heads):
                 place.hide()
+                self.missing += 1
                 return
             flowers = []
             for i, flower in enumerate(FLOWERS):
@@ -344,6 +368,53 @@ class ClayScene:
                 piece.show() if stage == state.stage else piece.hide()
             holder.setShaderInput("boil_seed", float(frame) + thing.id * 0.618 + i * 3.1)
 
+    def _broken_pieces(self, thing: Thing) -> dict[str, NodePath | None]:
+        """A broken egg's figures (bottom half, top half, puddle), each None until built."""
+        r = _radius(thing)
+        pieces: dict[str, NodePath | None] = {
+            "bottom": self._figure(
+                ("egg", r, "broken"), lambda: BROKEN_EGG.figure(thing), BROKEN_EGG.step, "egg"
+            )
+        }
+        for name, (recipe, step) in BROKEN_PIECES.items():
+            pieces[name] = self._figure(
+                ("egg", r, name), lambda recipe=recipe: recipe(r), step, f"egg {name}"
+            )
+        return pieces
+
+    def _breaking(self, thing: Thing, place: NodePath, frame: int, since: int) -> None:
+        """The broken egg's top half and puddle, round its bottom half, posed for `since`
+        stop-motion frames after the break (`breaking.py`). Hidden until all its pieces are
+        built, so it never shows half made."""
+        r = _radius(thing)
+        parts = self._breaks.get(thing.id)
+        if parts is None:
+            pieces = self._broken_pieces(thing)
+            top, spill = pieces["top"], pieces["puddle"]
+            if top is None or spill is None:
+                place.hide()
+                self.missing += 1
+                return
+            lid = place.attachNewNode("top half")
+            top.copyTo(lid)
+            pool = place.attachNewNode("puddle")
+            pool.setPos(0.3 * r, -0.05 * r, -r)  # on the ground, spreading to the right
+            spill.copyTo(pool)
+            for node in (lid, pool):
+                node.setShaderInput("boil_amount", 0.3)
+            parts = self._breaks[thing.id] = (lid, pool)
+            place.show()
+        lid, pool = parts
+        lid.setMat(_panda(top_half(r, since)))
+        spread = puddle(since)
+        if spread <= 0:
+            pool.hide()
+        else:
+            pool.show()
+            pool.setScale(spread, 1.0, 1.0)  # it spreads out along the ground
+        for i, node in enumerate((lid, pool)):
+            node.setShaderInput("boil_seed", float(frame) + thing.id * 0.618 + i * 2.3)
+
     def _note(self, thing: Thing, frame: int) -> None:
         """A stuck-down note's shadow box and rope, made when it's first seen (or reshaped).
         The box stays exactly with the paper; the rope jitters and boils like a figure."""
@@ -352,7 +423,7 @@ class ClayScene:
         if known is None or known[0] != key:
             if known is not None:
                 known[1].removeNode()
-            place = self.stage.root.attachNewNode(f"note {thing.id}")
+            place = self.things.attachNewNode(f"note {thing.id}")
             shadow_box(_outline(thing), BACKDROP_DEPTH).reparentTo(place)
             outline = figure_node(rope(_outline(thing), seed=thing.id % 1000), "note rope")
             outline.reparentTo(place)
@@ -383,3 +454,9 @@ def _palette(*colours: tuple[int, int, int]) -> PTA_LVecBase3f:
     for i in range(MAX_CLAYS):
         palette[i] = tuple(float(c) for c in linear(colours[i])) if i < len(colours) else (1, 1, 1)
     return palette
+
+
+def _panda(m: np.ndarray) -> LMatrix4f:
+    """A 4x4 matrix for column vectors (numpy's way) as Panda3D wants it for `setMat`: it
+    works with row vectors, so it's the transpose."""
+    return LMatrix4f(*np.asarray(m, dtype=np.float64).T.flatten())

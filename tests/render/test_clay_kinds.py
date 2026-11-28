@@ -7,8 +7,10 @@ from lorikeet.render.clay.figure import build
 from lorikeet.render.clay.kinds import (
     GO_THICKNESS,
     bed_leaves,
-    broken_egg,
     egg,
+    egg_bottom,
+    egg_puddle,
+    egg_top,
     flower_head,
     go_disc,
     ledge,
@@ -74,10 +76,13 @@ def test_the_flower_beds_leaves_sit_on_the_ground_a_little_wider_than_its_circle
     assert mesh.positions[:, 2].min() == pytest.approx(-45, abs=8)
 
 
-def test_a_broken_egg_is_two_cracked_halves_resting_on_the_ground_in_a_puddle():
-    mesh = build(broken_egg(28), step=0.8)
-    x, z = mesh.positions[:, 0], mesh.positions[:, 2]
+def test_a_broken_egg_is_a_bottom_half_a_top_half_and_a_puddle():
+    bottom = build(egg_bottom(28), step=0.8).positions
+    top = build(egg_top(28), step=0.8).positions
+    pool = build(egg_puddle(28), step=0.8).positions
 
-    assert z.min() == pytest.approx(-28, abs=3.5)  # everything rests on the ground
-    assert z.max() < 28  # the top half isn't on top any more...
-    assert x.max() > 50  # ...it's lying over to the right
+    assert bottom[:, 2].max() < 28 * 0.2  # below the crack...
+    assert top[:, 2].min() > -28 * 0.12  # ...and above it, where it was on the whole egg
+    assert bottom[:, 2].min() == pytest.approx(-28, abs=3)  # standing on the ground
+    assert np.ptp(pool[:, 2]) < 0.4 * 28  # the puddle is flat
+    assert np.ptp(pool[:, 0]) > 2.5 * 28  # and spreads wide

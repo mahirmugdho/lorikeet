@@ -25,7 +25,6 @@ from lorikeet.render.clay.shapes import (
     Cracked,
     Egg,
     Ellipsoid,
-    Placed,
     RoundCone,
     Shell,
     Slab,
@@ -175,38 +174,32 @@ EGG_WHITE, YOLK = (246, 242, 230), (222, 196, 148)
 camera never takes it for one."""
 
 
-def broken_egg(radius: float) -> Figure:
-    """The egg after it lands on the floor: its shell (hollow, now you can see it) cracked
-    round the middle along a zigzag, the bottom half still standing where the egg was, the
-    top half tipped over on its side to the right, and a little puddle of egg round them on
-    the ground (the bottom of the egg's circle). Swapped in for the egg as it breaks."""
+EGG_CRACK = (0.04, 7, 0.13)
+"""Where a breaking egg cracks: the zigzag's height and how far it goes up and down (as a
+share of the egg's radius), and how many points it has round the egg."""
+EGG_THICKNESS = 0.12
+"""How thick its shell is, as a share of its radius: you see it once it's broken."""
+
+
+def _shell_half(radius: float, above: bool) -> Cracked:
+    height, teeth, depth = EGG_CRACK
+    shell = Shell(Egg(radius), thickness=EGG_THICKNESS * radius)
+    return Cracked(shell, height * radius, teeth, depth * radius, above=above)
+
+
+def _half_of_egg(radius: float, above: bool) -> Figure:
+    """One half of the egg's shell, cracked along the zigzag, with the speckles that were on
+    that half (clear of the crack), where it was on the whole egg."""
     r = radius
-    shell = Shell(Egg(r), thickness=0.12 * r)
-    crack = {"height": 0.04 * r, "teeth": 7, "depth": 0.13 * r}
-    bottom = Cracked(shell, **crack)
-    # Tipped over: its dome turned to point right and a touch down, resting on the ground.
-    tipped = {"at": (1.3 * r, 0.0, -0.1 * r), "turn": rotation(pitch=-100)}
-    top = Placed(Cracked(shell, above=True, **crack), **tipped)
-    pieces = [
-        Piece(Ellipsoid((0.3 * r, -0.05 * r, -r), (1.5 * r, 0.5 * r, 0.08 * r)), "white"),
-        Piece(
-            Ellipsoid((0.75 * r, -0.2 * r, -0.94 * r), (0.32 * r, 0.26 * r, 0.13 * r)),
-            "yolk",
-            blend=0.04 * r,
-        ),
-        Piece(bottom, "shell", blend=0.03 * r),
-        Piece(top, "shell", blend=0.03 * r),
-    ]
-    # The whole egg's speckles, each on the half it was on (clear of the crack's zigzag).
+    height, _, depth = EGG_CRACK
+    pieces = [Piece(_shell_half(r, above), "shell")]
     for speckle in _speckles(r):
-        height = speckle.centre[2]
-        if height < crack["height"] - crack["depth"] - 0.05 * r:
+        z = speckle.centre[2] / r
+        if (z > height + depth + 0.05) if above else (z < height - depth - 0.05):
             pieces.append(Piece(speckle, "speckle", 0.02 * r))
-        elif height > crack["height"] + crack["depth"] + 0.05 * r:
-            pieces.append(Piece(Placed(speckle, **tipped), "speckle", 0.02 * r))
     return Figure(
         tuple(pieces),
-        {"white": EGG_WHITE, "yolk": YOLK, "shell": EGG_SHELL, "speckle": EGG_SPECKLE},
+        {"shell": EGG_SHELL, "speckle": EGG_SPECKLE},
         lump_height=0.4,
         lump_size=9.0,
         seam_depth=0.2,
@@ -214,6 +207,42 @@ def broken_egg(radius: float) -> Figure:
         mottle=0.05,
         mottle_size=8.0,
         seed=2,
+    )
+
+
+def egg_bottom(radius: float) -> Figure:
+    """The bottom half of a broken egg, standing where the egg was."""
+    return _half_of_egg(radius, above=False)
+
+
+def egg_top(radius: float) -> Figure:
+    """The top half of a broken egg, where it was on the whole egg: the clay set tips it
+    over as the egg breaks (`breaking.py`)."""
+    return _half_of_egg(radius, above=True)
+
+
+def egg_puddle(radius: float) -> Figure:
+    """The puddle a broken egg leaves, round its own middle on the ground: the white
+    spreading thin, the yolk a low dome in it, off to the right."""
+    r = radius
+    pieces = [
+        Piece(Ellipsoid((0, 0, 0), (1.5 * r, 0.5 * r, 0.08 * r)), "white"),
+        Piece(
+            Ellipsoid((0.45 * r, -0.15 * r, 0.06 * r), (0.32 * r, 0.26 * r, 0.13 * r)),
+            "yolk",
+            blend=0.04 * r,
+        ),
+    ]
+    return Figure(
+        tuple(pieces),
+        {"white": EGG_WHITE, "yolk": YOLK},
+        lump_height=0.3,
+        lump_size=9.0,
+        seam_depth=0.2,
+        seam_width=0.4,
+        mottle=0.05,
+        mottle_size=8.0,
+        seed=3,
     )
 
 

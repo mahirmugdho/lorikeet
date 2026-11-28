@@ -9,7 +9,8 @@ game's View, the wall and the overlay layer each frame, and it owns its window. 
 - **The set** (`stage.py`, `scene.py`): every thing in the View gets its clay figure, put
   where the View says, posed and boiled at 12 frames a second (`motion.py`).
 - **Figures are built in the background** (`builder.py`), so the first egg doesn't freeze the
-  game while it's built. Until a figure is ready its thing is left out.
+  game while it's built. Until a figure is ready its thing is left out. At startup the whole
+  set is held out of sight until it's all there, then shown at once (`loading.py`).
 - **The canvas.** The set is drawn into an offscreen picture the canvas's own size (projector
   pixels, with 8x anti-aliasing), then the words, the wall and the overlay layer go on top of
   it, in that order. The window just shows the finished picture, stretched to fill it. So the
@@ -49,19 +50,24 @@ from panda3d.core import (
 
 from lorikeet.render.clay.builder import Builder
 from lorikeet.render.clay.cache import detail
+from lorikeet.render.clay.loading import WORDS as LOADING_WORDS
+from lorikeet.render.clay.loading import Loading
 from lorikeet.render.clay.mirror import FLIPPED, Mirror
 from lorikeet.render.clay.motion import frame_of
 from lorikeet.render.clay.scene import ClayScene
 from lorikeet.render.clay.stage import Light, Stage
 from lorikeet.render.clay.window import fit, letterbox, monitors, pygame_key, pygame_settings
 from lorikeet.render.clay.words import Words
-from lorikeet.view import View
+from lorikeet.view import Text, Thing, View
 
 TITLE = "Lorikeet"
 LETTERBOX = (60 / 255, 58 / 255, 54 / 255, 1.0)
 """Behind the canvas where the window's shape doesn't match it (as in the desk window)."""
 
 MULTISAMPLES = 8
+
+LOADING_ID = -1
+"""The thing id "Loading…" is written under: one no game uses."""
 
 
 class ClayRenderer:
@@ -134,6 +140,12 @@ class ClayRenderer:
         base.accept("window-event", self._on_window_event)  # in place of ShowBase's own
         self._meter = False
         self._started = time.monotonic()
+        self._loading = Loading(self._started)
+        self._scene.hold(True)  # until it has all loaded
+        width, height = size
+        self._loading_words = View(
+            (Thing(LOADING_ID, "hint", Text(LOADING_WORDS, 40), (width / 2, height / 2)),)
+        )
         self._frames: list[float] = []
 
     @property
@@ -150,7 +162,12 @@ class ClayRenderer:
         now = time.monotonic()
         self._frames.append(now)
         self._scene.show(view, now - self._started)
-        self._words.show(view, frame_of(now - self._started))
+        holding, word = self._loading.step(self._scene.missing, now)
+        self._scene.hold(holding)
+        if holding:  # the game's own words wait too, with the set
+            self._words.show(self._loading_words if word else View(), 0)
+        else:
+            self._words.show(view, frame_of(now - self._started))
         for card in self._words_root.getChildren():
             if card.getName().startswith("words"):
                 card.setBin("fixed", 10)
