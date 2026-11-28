@@ -1,6 +1,6 @@
 # NNNN. Title in the form of a decision
 
-- **Status:** Proposed | Accepted | Superseded by NNNN | Rejected
+- **Status:** Accepted | Superseded by NNNN | Rejected
 - **Date:** YYYY-MM-DD
 - **Deciders:** Ryan, Mahir
 

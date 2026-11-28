@@ -12,7 +12,7 @@ description: Create a new Architecture Decision Record in docs/adr. Use when the
    - **Options considered**: at least two real options, with honest pros and cons.
    - **Decision**: what we chose and why it beat the others.
    - **Consequences**: what gets easier, what gets harder, what we're now committed to.
-4. Status starts as `Proposed`. Only a human sets it to `Accepted`, and only after the other teammate approved the PR that adds it.
-5. If this replaces an older ADR: set the old one's status to `Superseded by NNNN` (the only edit ever allowed to an accepted ADR) and link back from the new one.
+4. Status is `Accepted`. The other teammate approving the PR that adds the ADR is what accepts it, so nobody opens a second PR to flip the status. If they request changes, edit the ADR on the same PR.
+5. If this replaces an older ADR: set the old one's status to `Superseded by NNNN` (the only edit allowed to an accepted ADR, apart from the admin exception in `docs/adr/README.md`) and link back from the new one.
 6. Add a row to the index in `docs/adr/README.md`.
 7. Keep it under one screen. An ADR records a decision; it isn't a design doc.

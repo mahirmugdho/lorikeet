@@ -5,8 +5,9 @@ An ADR is a short note recording one decision: the context, the options, what we
 **Rules**
 
 - New ADR: use the `/new-adr` Claude skill, or copy `0000-template.md`.
-- Starts `Proposed`. Becomes `Accepted` when the *other* teammate approves the PR that adds it.
+- Write it as `Accepted`. The PR that adds it is the proposal: the *other* teammate's approval accepts it, and merging records it. No follow-up PR to flip a status. Disagree? Request changes, and it doesn't merge until you agree.
 - Accepted ADRs are never edited. To change course, write a new ADR that supersedes the old one.
+- The one exception: Mahir, as repo admin, can edit an accepted ADR in place.
 - Write one when a choice is expensive to reverse: a service, a data shape, a security boundary, a rule the whole codebase follows.
 
 | #                                               | Decision                                                            | Status                       |
@@ -18,4 +19,4 @@ An ADR is a short note recording one decision: the context, the options, what we
 | [0005](0005-projector-space-coordinates.md)     | Projector pixels are the only game coordinates; ArUco calibration   | Proposed                     |
 | [0006](0006-classical-color-detection.md)       | Detect notes with HSV colour segmentation, not ML                   | Proposed                     |
 | [0007](0007-camera-frames-stay-local.md)        | Camera frames stay in memory on this machine                        | Proposed                     |
-| [0008](0008-games-describe-a-view.md)           | Games describe a View; the renderer a player picks draws it         | Proposed                     |
+| [0008](0008-games-describe-a-view.md)           | Games describe a View; the renderer a player picks draws it         | Accepted                     |
