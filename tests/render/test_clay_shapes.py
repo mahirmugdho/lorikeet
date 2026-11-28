@@ -6,6 +6,7 @@ import pytest
 from lorikeet.render.clay.mesher import mesh_field
 from lorikeet.render.clay.shapes import (
     Coil,
+    Coin,
     Ellipsoid,
     RoundCone,
     Scaled,
@@ -161,3 +162,15 @@ def test_a_coil_is_a_round_rope_bent_round_an_oval_deeper_in_front_than_behind()
 
     assert d == pytest.approx([0, 0, 0, 0, 0], abs=1e-4)  # side, front, back, top, inside
     assert coil.distance(points((0, 0, 0)))[0] > 3  # the middle is empty
+
+
+def test_a_coin_is_flat_faced_with_a_rounded_rim():
+    coin = Coin(centre=(0, 0, 0), radius=20, thickness=6, round=2)
+
+    d = coin.distance(points((0, -3, 0), (20, 0, 0), (0, 0, 20), (0, -5, 0), (0, 0, 0)))
+
+    assert d[:3] == pytest.approx([0, 0, 0], abs=1e-4)  # the front face, and the rim
+    assert d[3] == pytest.approx(2, abs=1e-4)  # 2 in front of the face
+    assert d[4] < 0
+    corner = coin.distance(points((20, -3, 0)))[0]  # where a sharp edge would be
+    assert corner == pytest.approx(2 * (2**0.5 - 1), abs=1e-3)  # rounded off

@@ -9,7 +9,9 @@ How a thing's View maps onto the set:
 
 - **Where.** The thing's position, at a depth from its layer: higher layers stand a little
   further forward, so Lori is in front of her nest and the egg in front of both.
-- **Turn.** The thing's angle turns its figure in the wall's plane (the egg rolls).
+- **Turn.** The thing's angle turns its figure in the wall's plane. The egg tumbles as it
+  rolls; it's egg-shaped but the game rolls a ball, so it's lifted or lowered a little to
+  keep its lowest point where the ball's is, and it rocks along the ground like an egg.
 - **Stop-motion** (see `motion.py`). Positions and turns from the game stay smooth at the
   full frame rate. On top, each figure gets its tiny per-frame jitter, and its clay boils,
   12 times a second. Ledges don't jitter (they're the physics' ground, and a set is glued
@@ -17,21 +19,36 @@ How a thing's View maps onto the set:
 - **Notes** are real paper on the wall, so they get no figure: an invisible box that casts
   their shadow onto the set (`stage.shadow_box`), and a rope of dark clay just outside the
   paper (`rope.py`), so players see the note counts.
-- **The go ring** is pressed onto the backdrop, round the spot where the go note goes.
-- Kinds without a clay look yet (the words, for now) aren't drawn.
+- **The go disc** is pressed onto the backdrop where the go note goes, and gives a little
+  as the note goes on.
+- **The blossom** is a bed of flowers that blooms when the egg gets there (`bed.py`).
+- The View's words are written by the renderer (`words.py`), not here.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Hashable
 from dataclasses import dataclass
 
-from panda3d.core import NodePath
+import numpy as np
+from panda3d.core import NodePath, PTA_LVecBase3f, TransformState
 
+from lorikeet.render.clay.bed import CENTRES, FLOWERS, PETALS, flower_state
 from lorikeet.render.clay.builder import BuildNow, Builds
+from lorikeet.render.clay.colour import linear
 from lorikeet.render.clay.coords import heading, to_world
-from lorikeet.render.clay.figure import Figure
-from lorikeet.render.clay.kinds import GO_RING_TUBE, blossom, egg, go_ring, ledge, nest
+from lorikeet.render.clay.figure import MAX_CLAYS, ClayMesh, Figure, Packed
+from lorikeet.render.clay.kinds import (
+    FLOWER_STAGES,
+    GO_THICKNESS,
+    bed_leaves,
+    egg,
+    flower_head,
+    go_disc,
+    ledge,
+    nest,
+    stem,
+)
 from lorikeet.render.clay.lori import lori
 from lorikeet.render.clay.motion import Animator, bird_parts, frame_of, jitter
 from lorikeet.render.clay.rope import rope
@@ -50,6 +67,13 @@ us, as if seen from slightly above. Her figure faces +x, the way the game has he
 NOTE_BOIL, NOTE_JITTER = 0.3, 0.5
 """How much a note's rope creeps and jitters each stop-motion frame: a little, so it's alive
 like the figures but never strays onto the paper."""
+
+GO_PRESS = (0.94, 1.04)
+"""The go disc's size on the frames after the go note goes on: it gives, then springs back."""
+
+HEAD_SIZE, STEM_LENGTH = 0.9, 1.0
+"""What the bed's flower heads and stems are built at, as a share of the bed's radius; each
+flower is scaled from there (`bed.FLOWERS`)."""
 
 TIPPED = {"bird": LORI_TURN[1], "nest": LORI_TURN[1]}
 """Figures tipped towards the camera, as if seen from slightly above, in degrees. The nest
@@ -90,13 +114,14 @@ LOOKS = {
     "bird": Look(lambda t: lori(_radius(t)), step=1.0, boil=0.6, jitter=1.0),
     "egg": Look(lambda t: egg(_radius(t)), step=0.8, boil=0.3, jitter=0.6),
     "nest": Look(lambda t: nest(_radius(t)), step=1.0, boil=0.35, jitter=0.4),
-    "blossom": Look(lambda t: blossom(_radius(t)), step=0.8, boil=0.4, jitter=0.8),
+    # The blossom's own figure is the bed's leaves; its flowers are added round it (_bed).
+    "blossom": Look(lambda t: bed_leaves(_radius(t)), step=1.0, boil=0.35, jitter=0.5),
     "go": Look(
-        lambda t: go_ring(_radius(t)),
+        lambda t: go_disc(_radius(t)),
         step=1.2,
         boil=0.3,
-        jitter=0.3,
-        depth=BACKDROP_DEPTH - GO_RING_TUBE - 1,  # its back just touching the backdrop
+        jitter=0.4,
+        depth=BACKDROP_DEPTH - GO_THICKNESS / 2 - 1,  # its back just touching the backdrop
     ),
     "terrain": Look(
         lambda t: ledge(_outline(t), back=BACKDROP_DEPTH + 2),
@@ -124,6 +149,10 @@ class ClayScene:
             int, tuple[object, NodePath, NodePath]
         ] = {}  # id -> (key, place, figure)
         self._figures: dict[object, NodePath] = {}  # (kind, size) -> a built figure to copy
+        self._lowest: dict[object, np.ndarray] = {}  # egg figure -> its lowest point per degree
+        self._beds: dict[int, list[tuple[NodePath, NodePath, NodePath, list[NodePath]]]] = {}
+        self._bloomed: dict[int, int] = {}  # bed id -> the frame it started blooming
+        self._pressed: dict[int, tuple[str, int]] = {}  # go id -> (pose, frame it began)
 
     def show(self, view: View, now: float) -> None:
         """Bring the set up to date with `view`, at game time `now` (seconds)."""
@@ -156,8 +185,18 @@ class ClayScene:
             if thing.kind == "bird":
                 bird = self.animator.pose(thing.id, thing.pose, now)
                 pose(figure, bird_parts(bird, _radius(thing)))
+            elif thing.kind == "egg":
+                lowest = self._lowest[self._things[thing.id][0]]
+                roll = round(place.getR()) % 360
+                place.setZ(place.getZ() - _radius(thing) - lowest[roll])
+            elif thing.kind == "go":
+                place.setScale(place.getScale() * self._press(thing, frame))
+            elif thing.kind == "blossom":
+                self._bed(thing, place, frame)
         for thing_id in set(self._things) - present:
             self._things.pop(thing_id)[1].removeNode()
+            for state in (self._beds, self._bloomed, self._pressed):
+                state.pop(thing_id, None)
         self.animator.forget(present)
 
     def _node(self, thing: Thing, look: Look) -> tuple[NodePath, NodePath] | None:
@@ -170,25 +209,105 @@ class ClayScene:
             return known[1], known[2]
         if known is not None:  # same thing, new size: start again
             self._things.pop(thing.id)[1].removeNode()
-        if key not in self._figures:
-            if self._new_per_frame and self._new >= self._new_per_frame:
-                return None  # enough new figures this frame: this one can come next frame
-            mesh = self.builder.mesh(key, lambda: look.figure(thing), look.step)
-            if mesh is None:
-                return None
-            self._figures[key] = figure_node(mesh, thing.kind)
-            self._new += 1
+        built = self._figure(key, lambda: look.figure(thing), look.step, thing.kind)
+        if built is None:
+            return None
         place = self.stage.root.attachNewNode(f"{thing.kind} {thing.id}")
         holder = place
         if thing.kind in TIPPED:
             holder = place.attachNewNode("tilt")
             holder.setP(TIPPED[thing.kind])
-        figure = self._figures[key].copyTo(holder)
+        figure = built.copyTo(holder)
         figure.setShaderInput("detail_strength", look.detail)
         if thing.kind == "bird":
             figure.setH(LORI_TURN[0])
         self._things[thing.id] = (key, place, figure)
         return place, figure
+
+    def _figure(
+        self, key: Hashable, recipe: Callable[[], Figure], step: float, name: str
+    ) -> NodePath | None:
+        """A built figure to copy onto the set, or None while it's being built."""
+        if key in self._figures:
+            return self._figures[key]
+        if self._new_per_frame and self._new >= self._new_per_frame:
+            return None  # enough new figures this frame: this one can come next frame
+        mesh = self.builder.mesh(key, recipe, step)
+        if mesh is None:
+            return None
+        self._figures[key] = figure_node(mesh, name)
+        if name == "egg":
+            self._lowest[key] = _lowest_per_degree(mesh)
+        self._new += 1
+        return self._figures[key]
+
+    def _press(self, thing: Thing, frame: int) -> float:
+        """How big the go disc is this frame: it gives a little as the go note goes on."""
+        was, since = self._pressed.get(thing.id, (thing.pose, frame - len(GO_PRESS)))
+        if thing.pose != was:
+            since = frame
+        self._pressed[thing.id] = (thing.pose, since)
+        step = frame - since
+        return GO_PRESS[step] if thing.pose == "on" and step < len(GO_PRESS) else 1.0
+
+    def _bed(self, thing: Thing, place: NodePath, frame: int) -> None:
+        """The flower bed's flowers, round its leaves: each a stem and a head, the head one
+        of `FLOWER_STAGES` pieces swapped in as it opens. The bed is hidden until all its
+        pieces are built, so it never shows half made."""
+        r = _radius(thing)
+        flowers = self._beds.get(thing.id)
+        if flowers is None:
+            stems = self._figure(("stem", r), lambda: stem(STEM_LENGTH * r), 0.8, "stem")
+            heads = [
+                self._figure(
+                    ("flower", r, stage),
+                    lambda s=stage: flower_head(HEAD_SIZE * r, s),
+                    0.6,
+                    "flower",
+                )
+                for stage in range(FLOWER_STAGES)
+            ]
+            if stems is None or any(head is None for head in heads):
+                place.hide()
+                return
+            flowers = []
+            for i, flower in enumerate(FLOWERS):
+                holder = place.attachNewNode(f"flower {i}")
+                holder.setPos(flower.across * r, flower.depth, -r)  # its foot on the ground
+                held_stem = stems.copyTo(holder)
+                head = holder.attachNewNode("head")
+                colours = _palette(PETALS[flower.colour], CENTRES[flower.colour])
+                stages = []
+                for built in heads:
+                    assert built is not None
+                    piece = built.copyTo(head)
+                    piece.setShaderInput("palette", colours)
+                    piece.hide()
+                    stages.append(piece)
+                holder.setShaderInput("boil_amount", 0.4)
+                flowers.append((holder, held_stem, head, stages))
+            self._beds[thing.id] = flowers
+            place.show()
+        if thing.pose == "won":
+            bloomed: int | None = self._bloomed.setdefault(thing.id, frame)
+        else:
+            bloomed = self._bloomed.pop(thing.id, None) and None
+        for i, (flower, (holder, held_stem, head, stages)) in enumerate(
+            zip(FLOWERS, flowers, strict=True)
+        ):
+            state = flower_state(i, frame, bloomed)
+            if state.scale <= 0:
+                holder.hide()
+                continue
+            holder.show()
+            height = flower.stem * r * state.stem
+            held_stem.setScale(1, 1, flower.stem * state.stem / STEM_LENGTH)
+            head.setPos(0, -2, height)  # a touch in front of the stem's top
+            head.setR(state.sway)
+            head.setScale(flower.size / HEAD_SIZE * state.scale)
+            for stage, piece in enumerate(stages):
+                piece.show() if stage == state.stage else piece.hide()
+            holder.setShaderInput("boil_seed", float(frame) + thing.id * 0.618 + i * 3.1)
 
     def _note(self, thing: Thing, frame: int) -> None:
         """A stuck-down note's shadow box and rope, made when it's first seen (or reshaped).
@@ -210,3 +329,22 @@ class ClayScene:
         j = jitter(thing.id, frame)
         outline.setPos(j.dx * NOTE_JITTER, 0, -j.dy * NOTE_JITTER)
         outline.setShaderInput("boil_seed", float(frame) + thing.id * 0.618)
+
+
+def _lowest_per_degree(mesh: ClayMesh | Packed) -> np.ndarray:
+    """How far below its middle a figure reaches when turned by each whole degree in the
+    wall's plane (as `NodePath.setR` turns it): for resting the egg on its lowest point."""
+    points = mesh.rows[:, :3] if isinstance(mesh, Packed) else mesh.positions
+    ups = []
+    for degrees in range(360):
+        m = TransformState.makeHpr((0, 0, degrees)).getMat()
+        ups.append([m.getCell(row, 2) for row in range(3)])  # where z comes from, per axis
+    return (np.asarray(points, dtype=np.float64) @ np.array(ups).T).min(axis=0)
+
+
+def _palette(*colours: tuple[int, int, int]) -> PTA_LVecBase3f:
+    """Clay colours for a figure's clays, in its order (see `Figure.clay_names`)."""
+    palette = PTA_LVecBase3f.emptyArray(MAX_CLAYS)
+    for i in range(MAX_CLAYS):
+        palette[i] = tuple(float(c) for c in linear(colours[i])) if i < len(colours) else (1, 1, 1)
+    return palette

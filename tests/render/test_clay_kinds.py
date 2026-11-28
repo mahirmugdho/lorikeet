@@ -4,7 +4,15 @@ import numpy as np
 import pytest
 
 from lorikeet.render.clay.figure import build
-from lorikeet.render.clay.kinds import blossom, egg, go_ring, ledge, nest
+from lorikeet.render.clay.kinds import (
+    GO_THICKNESS,
+    bed_leaves,
+    egg,
+    flower_head,
+    go_disc,
+    ledge,
+    nest,
+)
 
 
 def extent(mesh) -> np.ndarray:
@@ -34,17 +42,32 @@ def test_the_nest_is_a_bowl_on_the_bottom_of_its_circle_deeper_in_front_than_beh
     assert (bowl.distance(where_she_sits.astype(np.float32)) > 0).all()  # no clay there
 
 
-def test_the_egg_is_about_as_big_as_its_circle():
+def test_the_egg_is_egg_shaped_and_about_as_big_as_its_ball():
     mesh = build(egg(28), step=1.0)
     x, _, z = extent(mesh)
-    assert x == pytest.approx(56, abs=3)
-    assert z == pytest.approx(56, abs=4)
+    assert z / x == pytest.approx(1.22, abs=0.08)  # taller than it's wide
+    assert (x + z) / 2 == pytest.approx(56, abs=4)  # about the ball's size
+    p = mesh.positions
+    below = np.ptp(p[np.abs(p[:, 2] + 10) < 1.5][:, 0])
+    above = np.ptp(p[np.abs(p[:, 2] - 14) < 1.5][:, 0])
+    assert above < below  # narrower at the top
 
 
-def test_the_blossom_and_the_go_ring_fill_their_circles():
-    flower = build(blossom(45), step=1.0)
-    ring = build(go_ring(70), step=1.5)
-    assert extent(flower)[0] == pytest.approx(90, abs=10)
-    assert extent(ring)[0] == pytest.approx(140, abs=3)
-    centre = np.hypot(ring.positions[:, 0], ring.positions[:, 2]) < 50
-    assert not centre.any()  # the go ring is empty in the middle
+def test_the_go_disc_fills_its_circle_with_go_standing_out_on_it():
+    mesh = build(go_disc(70), step=1.5)
+    assert extent(mesh)[0] == pytest.approx(140, abs=3)
+    assert extent(mesh)[2] == pytest.approx(140, abs=3)
+    front = mesh.positions[:, 1].min()
+    assert front < -GO_THICKNESS / 2 - 3  # the letters stand out in front of the face
+
+
+def test_a_flower_opens_wider_stage_by_stage():
+    widths = [extent(build(flower_head(22, stage), step=0.6))[0] for stage in range(4)]
+    assert widths == sorted(widths)
+    assert widths[-1] > 2 * widths[0]
+
+
+def test_the_flower_beds_leaves_sit_on_the_ground_a_little_wider_than_its_circle():
+    mesh = build(bed_leaves(45), step=1.5)
+    assert extent(mesh)[0] == pytest.approx(2.6 * 45, rel=0.1)
+    assert mesh.positions[:, 2].min() == pytest.approx(-45, abs=8)

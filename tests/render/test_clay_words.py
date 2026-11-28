@@ -19,8 +19,8 @@ def test_words_are_centred_where_the_view_puts_them():
     (card,) = root.getChildren()  # one card, and nothing for the egg
     width, height = card.getPythonTag("size")
     left, top = (card.getX() + 1) / 2 * CANVAS[0], (1 - card.getZ()) / 2 * CANVAS[1]
-    assert left + width / 2 == pytest.approx(960, abs=1)
-    assert top + height / 2 == pytest.approx(173, abs=1)
+    assert left + width / 2 == pytest.approx(960, abs=1.5)  # give or take its jitter
+    assert top + height / 2 == pytest.approx(173, abs=1.5)
     assert (left, top) == pytest.approx((round(left), round(top)), abs=1e-3)  # whole pixels
 
 

@@ -5,7 +5,8 @@ pygame in the same font and inks as the flat looks, then laid over the clay pict
 card. They go under the wall, since they're projected light too. The inks are dark and
 neutral, so projected words never look like a note to the camera. Each word card has a
 faint soft shadow down and to the right, the way the set's light falls, so the words sit in
-the set rather than float over it.
+the set rather than float over it, and like everything on the set they're never quite
+still: each stop-motion frame they shift by up to a pixel.
 
 Panda3D needs no window to make the cards, so this is tested without one.
 """
@@ -15,6 +16,7 @@ from __future__ import annotations
 import pygame
 from panda3d.core import CardMaker, NodePath, SamplerState, Texture, TransparencyAttrib
 
+from lorikeet.render.clay.motion import jitter
 from lorikeet.render.flat_looks import INK, SOFT_INK
 from lorikeet.view import Text, Thing, View
 
@@ -33,15 +35,16 @@ class Words:
         self._fonts: dict[int, pygame.font.Font] = {}
         self._cards: dict[int, tuple[object, NodePath]] = {}  # thing id -> (key, card)
 
-    def show(self, view: View) -> None:
-        """Put up the View's words where it says, and take down any that have gone."""
+    def show(self, view: View, frame: int = 0) -> None:
+        """Put up the View's words where it says, on stop-motion frame `frame`, and take
+        down any that have gone."""
         present = set()
         for thing in view.things:
             if not isinstance(thing.shape, Text):
                 continue
             present.add(thing.id)
             card = self._card(thing, thing.shape)
-            self._place(card, thing)
+            self._place(card, thing, frame)
         for thing_id in set(self._cards) - present:
             self._cards.pop(thing_id)[1].removeNode()
 
@@ -73,12 +76,14 @@ class Words:
         self._cards[thing.id] = (key, card)
         return card
 
-    def _place(self, card: NodePath, thing: Thing) -> None:
-        """Centred on the thing, its corner on a whole pixel so the letters stay crisp."""
+    def _place(self, card: NodePath, thing: Thing, frame: int) -> None:
+        """Centred on the thing, nudged by its jitter for this frame, its corner on a whole
+        pixel so the letters stay crisp."""
         width, height = card.getPythonTag("size")
         canvas_w, canvas_h = self._canvas
-        left = round(thing.position[0] - width / 2)
-        top = round(thing.position[1] - height / 2)
+        nudge = jitter(thing.id, frame)
+        left = round(thing.position[0] - width / 2 + 2.5 * nudge.dx)
+        top = round(thing.position[1] - height / 2 + 2.5 * nudge.dy)
         card.setPos(2 * left / canvas_w - 1, 0, 1 - 2 * top / canvas_h)
         card.setScale(2 * width / canvas_w, 1, 2 * height / canvas_h)
 

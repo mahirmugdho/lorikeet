@@ -195,6 +195,33 @@ class Torus:
 
 
 @dataclass(frozen=True)
+class Coin:
+    """A flat round of clay with soft, rounded edges, facing the camera (its flat faces
+    look along y): the go disc. `radius` is to its outer edge, `thickness` front to back,
+    and `round` how round its edge is."""
+
+    centre: Vec3
+    radius: float
+    thickness: float
+    round: float
+
+    def distance(self, p: np.ndarray) -> np.ndarray:
+        q = p - np.asarray(self.centre, dtype=np.float32)
+        # A rounded cylinder: the distance in the (out from the axis, along the axis) plane to
+        # a rectangle shrunk by `round`, less `round`.
+        out = np.hypot(q[:, 0], q[:, 2]) - (self.radius - self.round)
+        along = np.abs(q[:, 1]) - (self.thickness / 2 - self.round)
+        outside = np.hypot(np.maximum(out, 0), np.maximum(along, 0))
+        inside = np.minimum(np.maximum(out, along), 0)
+        return (outside + inside - self.round).astype(np.float32)
+
+    def bounds(self) -> tuple[np.ndarray, np.ndarray]:
+        c = np.asarray(self.centre)
+        reach = np.array([self.radius, self.thickness / 2, self.radius])
+        return c - reach, c + reach
+
+
+@dataclass(frozen=True)
 class Coil:
     """A rope of clay, round in section, bent round an oval lying flat around the shape's
     own z axis: one coil of a coil pot. The oval reaches `across` to each side, `front`

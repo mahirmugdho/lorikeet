@@ -12,6 +12,7 @@ import pytest
 from panda3d.core import Camera, NodePath
 
 import lorikeet.render.clay.scene as scene_module
+from lorikeet.render.clay.bed import FLOWERS
 from lorikeet.render.clay.builder import BuildNow
 from lorikeet.render.clay.coords import to_world
 from lorikeet.render.clay.detail import clay_detail
@@ -145,3 +146,52 @@ def test_newly_built_figures_can_join_one_a_frame(clay):
     clay.show(View((lori, ledge)), now=0.02)
     placed(clay, "bird 4")
     placed(clay, "terrain 100")
+
+
+def tall(thing: Thing) -> Figure:
+    """An upright, egg-like stand-in: taller than it's wide."""
+    return Figure((Piece(Ellipsoid((0, 0, 0), (3, 3, 5)), "c"),), {"c": (200, 200, 200)})
+
+
+def test_the_egg_rests_on_its_lowest_point_however_it_has_rolled(clay, monkeypatch):
+    monkeypatch.setitem(scene_module.LOOKS, "egg", Look(tall, step=1.0, boil=0.3, jitter=0.0))
+    ground = to_world((100, 85))[2]  # the bottom of its ball, radius 5 at y 80
+    for angle in (0.0, 0.5, 1.5708, 2.2):
+        egg = Thing(1000, "egg", Circle(5), (100, 80), angle=angle, layer=3)
+        clay.show(View((egg,)), now=0.0)
+
+        low, _ = placed(clay, "egg 1000").getTightBounds(clay.stage.root)
+        assert low.z == pytest.approx(ground, abs=0.05)
+
+
+def test_the_go_disc_gives_a_little_as_the_go_note_goes_on(clay, monkeypatch):
+    monkeypatch.setitem(scene_module.LOOKS, "go", Look(ball, step=1.0, boil=0.3, jitter=0.0))
+    sizes = []
+    for frame, pose_name in enumerate(("off", "off", "on", "on", "on", "on")):
+        go = Thing(2, "go", Circle(70), (130, 920), pose=pose_name)
+        clay.show(View((go,)), now=frame / 12 + 0.001)
+        sizes.append(round(placed(clay, "go 2").getScale()[0], 3))
+
+    assert sizes[:2] == [1.0, 1.0]
+    assert sizes[2] < 1.0 < sizes[3]  # gives, springs back...
+    assert sizes[4:] == [1.0, 1.0]  # ...and settles
+
+
+def test_the_flower_bed_waits_with_its_buds_hidden_then_blooms(clay, monkeypatch):
+    monkeypatch.setitem(scene_module.LOOKS, "blossom", Look(ball, step=1.0, boil=0.3, jitter=0.0))
+    bed = Thing(1, "blossom", Circle(20), (300, 100), layer=1)
+    clay.show(View((bed,)), now=0.0)
+
+    flowers = [placed(clay, f"flower {i}") for i in range(len(FLOWERS))]
+    for flower, node in zip(FLOWERS, flowers, strict=True):
+        assert node.isHidden() == flower.bud
+
+    won = Thing(1, "blossom", Circle(20), (300, 100), layer=1, pose="won")
+    clay.show(View((won,)), now=1.0)
+    clay.show(View((won,)), now=6.0)
+    for node in flowers:
+        assert not node.isHidden()
+        shown = [
+            i for i, piece in enumerate(node.find("head").getChildren()) if not piece.isHidden()
+        ]
+        assert shown == [3]  # wide open

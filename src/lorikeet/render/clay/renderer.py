@@ -50,6 +50,7 @@ from panda3d.core import (
 from lorikeet.render.clay.builder import Builder
 from lorikeet.render.clay.cache import detail
 from lorikeet.render.clay.mirror import FLIPPED, Mirror
+from lorikeet.render.clay.motion import frame_of
 from lorikeet.render.clay.scene import ClayScene
 from lorikeet.render.clay.stage import Light, Stage
 from lorikeet.render.clay.window import fit, letterbox, monitors, pygame_key, pygame_settings
@@ -149,7 +150,7 @@ class ClayRenderer:
         now = time.monotonic()
         self._frames.append(now)
         self._scene.show(view, now - self._started)
-        self._words.show(view)
+        self._words.show(view, frame_of(now - self._started))
         for card in self._words_root.getChildren():
             if card.getName().startswith("words"):
                 card.setBin("fixed", 10)
