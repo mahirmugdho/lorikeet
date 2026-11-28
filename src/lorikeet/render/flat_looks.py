@@ -225,15 +225,23 @@ class FlatLooks:
 def _broken_egg(canvas: pygame.Surface, thing: Thing) -> None:
     """An egg that broke where it lies: its bottom half, cracked open along a zigzag, in a
     small puddle of egg, with its top half tipped over beside it."""
-    (x, y), r = thing.position, _radius(thing)
-    floor = y + r  # it broke lying on whatever's under it: the floor, for now
+    (x, _), r = thing.position, _radius(thing)
+    bottom, cap, floor = broken_shell(thing.position, r)
     _ellipse(canvas, EGG_WHITE, (x + 0.25 * r, floor - 0.12 * r), (2.7 * r, 0.24 * r))
     _ellipse(canvas, YOLK, (x + 0.8 * r, floor - 0.14 * r), (0.6 * r, 0.2 * r))
+    for half in (bottom, cap):
+        pygame.draw.polygon(canvas, EGG, half)
+        pygame.draw.polygon(canvas, EGG_RIM, half, 3)
+
+
+def broken_shell(centre: Point, r: float) -> tuple[list[Point], list[Point], float]:
+    """A broken egg's two halves, for an egg of radius `r` that broke at `centre`: the bottom
+    half where the egg was, cracked open along a zigzag, and the top half, a little smaller,
+    tipped over on its side to the right on the same ground. Also how far down the ground is.
+    Shared by the looks that draw a broken egg flat (this one and the sketch)."""
+    x, y = centre
+    floor = y + r  # it broke lying on whatever's under it: the floor, for now
     bottom = [(x + px, y + py) for px, py in _half_shell(r, upper=False)]
-    pygame.draw.polygon(canvas, EGG, bottom)
-    pygame.draw.polygon(canvas, EGG_RIM, bottom, 3)
-    # The top half, a little smaller, tipped over on its side to the right, resting on the
-    # same ground as the bottom half.
     turn = math.radians(100)
     cap = [
         (
@@ -244,8 +252,7 @@ def _broken_egg(canvas: pygame.Surface, thing: Thing) -> None:
     ]
     lowest = max(py for _, py in cap)
     cap = [(x + 1.25 * r + px, floor - lowest + py) for px, py in cap]
-    pygame.draw.polygon(canvas, EGG, cap)
-    pygame.draw.polygon(canvas, EGG_RIM, cap, 3)
+    return bottom, cap, floor
 
 
 def _half_shell(r: float, upper: bool) -> list[Point]:
