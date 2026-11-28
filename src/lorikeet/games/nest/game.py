@@ -66,9 +66,11 @@ _TERRAIN, _EGGS, _NOTES = 100, 1000, 100_000
 NEST_RADIUS, LORI_RADIUS = 40.0, 46.0
 """Lori is a good deal bigger than her egg (`EGG_RADIUS`), and a little wider than her nest's
 circle: the nest's bowl is drawn wider than its circle."""
-LORI_FROM_NEST = (-4.0, -6.0)
-"""Where Lori sits: in her nest, sunk into it. The nest is in front of her in the View (a
-higher layer), so its front hides her lower half and she sticks up out of it."""
+LORI_FROM_NEST = (-10.0, -16.0)
+"""Where Lori sits: in her nest, a little left of its middle and sunk into it. The nest is in
+front of her in the View (a higher layer), so its front hides her lower half and she sticks
+up out of it. Left of the middle, so an egg comes up out of the nest in front of her chest
+and flies off to her right."""
 
 START_HINT = "Stick a note on the go ring to start"
 WON_MESSAGE = "Lori's egg made it!"
