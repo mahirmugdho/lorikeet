@@ -3,7 +3,14 @@
 import pygame
 import pytest
 
-from lorikeet.render.clay.window import Monitor, fit, letterbox, parse_monitors, pygame_key
+from lorikeet.render.clay.window import (
+    Monitor,
+    fit,
+    letterbox,
+    parse_monitors,
+    pygame_key,
+    pygame_settings,
+)
 
 LISTING = """Monitors: 2
  0: +*eDP-1 2880/285x1920/190+0+0  eDP-1
@@ -44,3 +51,13 @@ def test_panda_keys_become_pygame_keys():
     assert pygame_key("d") == pygame.K_d
     assert pygame_key("arrow_left") == pygame.K_LEFT
     assert pygame_key("mouse1") is None
+
+
+def test_beside_panda3d_pygame_draws_through_x11_on_linux_and_never_through_opengl():
+    """Through Wayland, or through OpenGL, the desk window fails or flashes black once the
+    clay window is open."""
+    assert pygame_settings("linux") == {
+        "SDL_VIDEODRIVER": "x11",
+        "SDL_FRAMEBUFFER_ACCELERATION": "0",
+    }
+    assert pygame_settings("darwin") == {"SDL_FRAMEBUFFER_ACCELERATION": "0"}

@@ -77,6 +77,24 @@ def letterbox(window: tuple[int, int], canvas: tuple[int, int]) -> tuple[float, 
     return min(1.0, canvas_shape / window_shape), min(1.0, window_shape / canvas_shape)
 
 
+def pygame_settings(platform: str) -> dict[str, str]:
+    """SDL settings for pygame's windows (the desk window) beside a Panda3D window.
+
+    - Linux: through X11. The pygame renderers draw through Wayland where they can
+      (`flat.native_pixel_settings`), but Panda3D only draws through X11 (XWayland), and
+      once its window is open, an SDL window on Wayland in the same process can't get a
+      picture to draw on ("Window framebuffer support not available").
+    - Everywhere: show pygame's pictures without OpenGL. By default SDL can put a window's
+      picture on screen through OpenGL, and two OpenGL users in one process trip over each
+      other: the desk window flashed black about every other frame and didn't show new
+      notes. Without OpenGL, SDL copies the picture straight to the window.
+    """
+    settings = {"SDL_FRAMEBUFFER_ACCELERATION": "0"}
+    if platform.startswith("linux"):
+        settings["SDL_VIDEODRIVER"] = "x11"
+    return settings
+
+
 _RENAMED = {
     "enter": "return",
     "arrow_left": "left",

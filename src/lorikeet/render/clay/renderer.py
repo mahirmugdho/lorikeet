@@ -52,7 +52,7 @@ from lorikeet.render.clay.cache import detail
 from lorikeet.render.clay.mirror import FLIPPED, Mirror
 from lorikeet.render.clay.scene import ClayScene
 from lorikeet.render.clay.stage import Light, Stage
-from lorikeet.render.clay.window import fit, letterbox, monitors, pygame_key
+from lorikeet.render.clay.window import fit, letterbox, monitors, pygame_key, pygame_settings
 from lorikeet.render.clay.words import Words
 from lorikeet.view import View
 
@@ -214,14 +214,9 @@ class ClayRenderer:
 
 
 def _start_pygame_display() -> None:
-    """Start pygame's display again for the desk window, through X11 on Linux.
-
-    The pygame renderers draw through Wayland where they can (`flat.native_pixel_settings`),
-    but Panda3D only draws through X11 (XWayland), and once its window is open, an SDL window
-    on Wayland in the same process can't get a picture to draw on ("Window framebuffer
-    support not available"). Through X11 both work."""
-    if sys.platform.startswith("linux"):
-        os.environ["SDL_VIDEODRIVER"] = "x11"
+    """Start pygame's display again for the desk window, set up to share the process with
+    Panda3D (see `window.pygame_settings`)."""
+    os.environ.update(pygame_settings(sys.platform))
     pygame.display.quit()
     pygame.display.init()
 
