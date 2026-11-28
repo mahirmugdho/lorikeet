@@ -1,5 +1,9 @@
 """Drawing in a hand-drawn pencil style, with line boil and soft drop shadows.
 
+Shared by the desk's paper notes and the sketch renderer, so both are drawn by the same hand
+and boil in step. It lives with the renderers because renderers may import nothing of
+Lorikeet's but the view and each other (ADR 0008); the desk is free to import it from here.
+
 Line boil is the wobble of hand-drawn animation. Every frame was traced again by hand, so
 the lines never sit exactly still. Here, each shape gets a fresh random wobble 10 times a
 second (`BOIL_FPS`), seeded by the shape and the boil frame. So between boil frames it
@@ -62,6 +66,20 @@ def pencil_outline(
     for a, b in _edges(polygon):
         for _ in range(2):
             pygame.draw.lines(canvas, color, False, _stroke(a, b, rng), 2)
+
+
+NOTE_GAP = 6.0
+"""Pixels between a note's edge and the pencil line drawn around it."""
+
+
+def around(polygon: Polygon, gap: float = NOTE_GAP) -> Polygon:
+    """`polygon` grown outwards by about `gap` pixels, by moving each corner away from the
+    middle. It's exact for a square note and close enough for a merged, L-shaped one."""
+    cx = sum(x for x, _ in polygon) / len(polygon)
+    cy = sum(y for _, y in polygon) / len(polygon)
+    reach = sum(math.hypot(x - cx, y - cy) for x, y in polygon) / len(polygon) or 1.0
+    grow = 1 + gap / reach
+    return tuple((cx + (x - cx) * grow, cy + (y - cy) * grow) for x, y in polygon)
 
 
 def pencil_loop(

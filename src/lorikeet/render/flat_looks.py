@@ -9,7 +9,8 @@ The colours are muted on purpose. The camera finds notes by how vivid their colo
 Two kinds keep the light off real paper, for the same reason (anything bright or coloured
 under a note shifts its colour for the camera):
 
-- `note` draws nothing: it's real paper on the wall, or the desk's own sketched paper.
+- `note` gets a hand-drawn pencil outline just outside its edge, boiling like the desk's
+  sketch, and its paper is left alone. Dark lines add no light or colour.
 - `go` is only a ring, and its middle stays empty for the note stuck on it.
 
 Light comes from the top left, so shadows fall down and to the right.
@@ -18,12 +19,18 @@ Light comes from the top left, so shadows fall down and to the right.
 from __future__ import annotations
 
 import math
+import time
 from collections.abc import Callable, Sequence
 
 import pygame
 
 from lorikeet.interface import Point
+from lorikeet.render.pencil import around, boil_frame, pencil_outline, seeded
 from lorikeet.view import Circle, Outline, Text, Thing
+
+BACKDROP = (232, 230, 226)
+"""A light, nearly grey backdrop: shadows show on it, and it adds almost no colour to real
+notes under the projector, because detection keys on saturation (ADR 0006)."""
 
 DEFAULT_FILL = (150, 146, 140)
 DEFAULT_EDGE = (105, 101, 96)
@@ -34,7 +41,7 @@ EGG, EGG_SPECKLE, EGG_SHINE = (247, 240, 226), (206, 190, 166), (255, 253, 248)
 EGG_RIM = (150, 140, 124)
 """Projected onto paper, a nearly white egg is just slightly brighter paper, so a darker rim
 keeps its outline visible (on the desk's notes and on real ones)."""
-NEST, NEST_HOLLOW = (150, 122, 92), (118, 94, 70)
+NEST, NEST_WEAVE, NEST_EDGE = (150, 122, 92), (134, 108, 80), (112, 88, 64)
 BIRD, BIRD_BELLY, BIRD_WING, BIRD_HEAD = (
     (116, 164, 142),
     (200, 216, 190),
@@ -63,8 +70,11 @@ Look = Callable[[pygame.Surface, Thing], None]
 
 
 class FlatLooks:
-    def __init__(self) -> None:
+    backdrop = BACKDROP
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
         pygame.font.init()
+        self._clock = clock  # drives the boil of the outlines round notes
         self._font = pygame.font.Font(None, 30)  # None picks the font pygame ships with
         self._shadows: dict[tuple[object, ...], pygame.Surface] = {}
         self._fonts: dict[int, pygame.font.Font] = {}
@@ -75,7 +85,7 @@ class FlatLooks:
             "bird": self._bird,
             "blossom": self._blossom,
             "go": self._go,
-            "note": _nothing,
+            "note": self._note,
         }
 
     def draw(self, canvas: pygame.Surface, thing: Thing) -> None:
@@ -115,12 +125,18 @@ class FlatLooks:
         pygame.draw.circle(canvas, EGG_SHINE, (x - 0.35 * r, y - 0.4 * r), 0.22 * r)
 
     def _nest(self, canvas: pygame.Surface, thing: Thing) -> None:
+        """A bowl seen from the front and a little above: only its front wall, from the
+        front edge of the rim down to the bottom, sitting on the ground at the bottom of the
+        nest's circle. The hollow inside is left open, so whatever sits in the nest (Lori,
+        a layer behind it) shows above the front wall, as if down inside it."""
         (x, y), r = thing.position, _radius(thing)
-        bowl = pygame.Rect(0, 0, round(2.6 * r), round(1.15 * r))
-        bowl.center = (round(x), round(y + 0.55 * r))
-        pygame.draw.ellipse(canvas, NEST, bowl)
-        hollow = bowl.inflate(-round(0.5 * r), -round(0.5 * r)).move(0, -round(0.18 * r))
-        pygame.draw.ellipse(canvas, NEST_HOLLOW, hollow)
+        centre, across = (x, y + 0.35 * r), 1.3 * r
+        bottom = _lower_arc(centre, across, 0.65 * r)  # reaches the ground at y + r
+        rim = _lower_arc(centre, across, 0.24 * r)
+        pygame.draw.polygon(canvas, NEST, bottom + rim[::-1])
+        for depth in (0.38, 0.52):  # the coils of the weave
+            pygame.draw.lines(canvas, NEST_WEAVE, False, _lower_arc(centre, across, depth * r), 2)
+        pygame.draw.lines(canvas, NEST_EDGE, False, rim, 3)
 
     def _bird(self, canvas: pygame.Surface, thing: Thing) -> None:
         """Lori: a round bird facing right, towards her nest. She hops when an egg wins and
@@ -155,6 +171,13 @@ class FlatLooks:
             petal = (x + 0.55 * r * math.cos(angle), y + 0.55 * r * math.sin(angle))
             pygame.draw.circle(canvas, PETAL, petal, 0.48 * r)
         pygame.draw.circle(canvas, BLOSSOM_CENTRE, (x, y), 0.38 * r)
+
+    def _note(self, canvas: pygame.Surface, thing: Thing) -> None:
+        """A pencil outline round the note, so players see it's counted. Only stuck-down notes
+        are in the View, so a note still in a hand isn't outlined."""
+        if isinstance(thing.shape, Outline):
+            rng = seeded(thing.id, boil_frame(self._clock()))
+            pencil_outline(canvas, around(thing.shape.placed(thing.position, thing.angle)), rng)
 
     def _go(self, canvas: pygame.Surface, thing: Thing) -> None:
         """A ring, thicker once a note is on it, with "go" written under it."""
@@ -222,12 +245,17 @@ def _default(canvas: pygame.Surface, thing: Thing) -> None:
         pygame.draw.polygon(canvas, DEFAULT_EDGE, points, 2)
 
 
-def _nothing(canvas: pygame.Surface, thing: Thing) -> None:
-    pass
-
-
 def _radius(thing: Thing) -> float:
     return thing.shape.radius if isinstance(thing.shape, Circle) else 20.0
+
+
+def _lower_arc(centre: Point, rx: float, ry: float, steps: int = 24) -> list[Point]:
+    """The bottom half of an ellipse, from its right end round to its left end."""
+    cx, cy = centre
+    return [
+        (cx + rx * math.cos(math.pi * i / steps), cy + ry * math.sin(math.pi * i / steps))
+        for i in range(steps + 1)
+    ]
 
 
 def _ellipse(

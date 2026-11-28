@@ -20,6 +20,7 @@ they can't depend on any one game. `tests/test_boundaries.py` checks that.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol
 
 import pygame
@@ -33,8 +34,11 @@ class Renderer(Protocol):
         """The canvas, in projector pixels. The overlay layer must be this size."""
         ...
 
-    def events(self) -> list[pygame.event.Event]:
-        """The mouse and keyboard input since the last call, positions in canvas pixels."""
+    def events(self, pending: Sequence[pygame.event.Event]) -> list[pygame.event.Event]:
+        """Of the input that just arrived (`pending`, read once for every window), the events
+        from this renderer's window, with positions in canvas pixels. With two windows open
+        (the game and the desk), each takes only its own. A renderer whose window isn't a
+        pygame one ignores `pending` and returns its own input, translated to pygame events."""
         ...
 
     def draw(self, view: View, wall: pygame.Surface, layer: pygame.Surface) -> None:

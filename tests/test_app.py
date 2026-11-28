@@ -1,10 +1,13 @@
-"""The launcher wires an input, a game, overlays and a renderer together. A fake renderer
-stands in for the window here, so none of this needs a display."""
+"""The launcher wires an input, a game and its windows together: the game window (the
+projection) and, at the desk, the desk window. Fake renderers stand in for the windows and a
+scripted queue for pygame's input, so none of this needs a display."""
+
+from collections.abc import Callable, Sequence
 
 import pygame
 import pytest
 
-from lorikeet.app import parse_args, run
+from lorikeet.app import Screen, parse_args, run
 from lorikeet.desk.source import DeskSceneSource
 from lorikeet.interface import Scene
 from lorikeet.view import Circle, Thing, View
@@ -15,20 +18,30 @@ RED, BLUE = (255, 0, 0, 255), (0, 0, 255, 255)
 EGG = View(things=(Thing(id=1, kind="egg", shape=Circle(5), position=(10, 10)),))
 
 
+def scripted(*events: pygame.event.Event) -> Callable[[], list[pygame.event.Event]]:
+    """Stands in for pygame's input queue: hands out `events` once, then nothing."""
+    queue = [list(events)]
+    return lambda: queue.pop() if queue else []
+
+
+def event(kind: int, window: str | None = None, **attributes: object) -> pygame.event.Event:
+    return pygame.event.Event(kind, {"window": window, **attributes})
+
+
 class FakeRenderer:
-    """Hands out its scripted events once, and keeps each view and a copy of each layer."""
+    """Takes the input from its own window (named by `window`), and keeps each view and a copy
+    of each wall and layer it's asked to draw."""
 
     size = SIZE
 
-    def __init__(self, events: list[pygame.event.Event] | None = None) -> None:
-        self._events = list(events or [])
+    def __init__(self, window: str | None = None) -> None:
+        self.window = window
         self.views: list[View] = []
         self.walls: list[pygame.Surface] = []
         self.layers: list[pygame.Surface] = []
 
-    def events(self) -> list[pygame.event.Event]:
-        events, self._events = self._events, []
-        return events
+    def events(self, pending: Sequence[pygame.event.Event]) -> list[pygame.event.Event]:
+        return [e for e in pending if getattr(e, "window", None) == self.window]
 
     def draw(self, view: View, wall: pygame.Surface, layer: pygame.Surface) -> None:
         self.views.append(view)
@@ -51,8 +64,8 @@ class FakeGame:
 
 
 class FakeOverlay:
-    """Notes the type of every event it's given, and marks SPOT on the layer when drawn,
-    for its first `frames` frames."""
+    """Notes the type of every event it's given, and marks SPOT on the layer (and, given
+    `paper`, on the wall) when drawn, for its first `frames` frames."""
 
     def __init__(
         self,
@@ -62,7 +75,7 @@ class FakeOverlay:
     ) -> None:
         self.mark = mark
         self.frames = frames
-        self.paper = paper  # given, it also puts this colour on the wall at SPOT
+        self.paper = paper
         self.events: list[int] = []
 
     def handle(self, event: pygame.event.Event) -> None:
@@ -78,7 +91,13 @@ class FakeOverlay:
             self.frames -= 1
 
 
-def test_defaults_are_the_desk_in_a_1920x1080_window_drawn_flat():
+def one_window(*overlays: FakeOverlay) -> tuple[FakeRenderer, list[Screen]]:
+    renderer = FakeRenderer()
+    return renderer, [Screen(renderer, overlays)]
+
+
+def test_defaults_are_the_desk_and_a_1920x1080_game_window_drawn_flat():
+    # The game window is the projection, flat by default; the desk gets its own window.
     args = parse_args([])
 
     assert (args.input, args.output, args.renderer, args.size) == (
@@ -87,6 +106,10 @@ def test_defaults_are_the_desk_in_a_1920x1080_window_drawn_flat():
         "flat",
         (1920, 1080),
     )
+
+
+def test_the_game_windows_renderer_can_be_chosen():
+    assert parse_args(["--renderer", "sketch"]).renderer == "sketch"
 
 
 def test_the_default_game_is_nest_from_its_first_level():
@@ -122,66 +145,83 @@ def test_run_gives_the_game_the_sources_scenes():
     source = DeskSceneSource(clock=lambda: 0.0)
     source.drop("yellow", (160, 90))
     game = FakeGame()
+    _, screens = one_window()
 
-    run(game, source, FakeRenderer(), max_frames=2)
+    run(game, source, screens, max_frames=2, poll=scripted())
 
     assert [len(scene.pieces) for scene in game.scenes] == [1, 1]
 
 
-def test_run_hands_the_renderer_the_games_view():
-    renderer = FakeRenderer()
+def test_every_window_is_handed_the_same_view():
+    game_window, desk_window = FakeRenderer(), FakeRenderer("desk")
 
-    run(FakeGame(), DeskSceneSource(), renderer, max_frames=1)
+    run(FakeGame(), DeskSceneSource(), [Screen(game_window), Screen(desk_window)], 1, scripted())
 
-    assert renderer.views == [EGG]
+    assert (game_window.views, desk_window.views) == ([EGG], [EGG])
 
 
-def test_run_gives_every_overlay_the_events():
-    click = pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=(40, 50), button=3)
-    overlays = (FakeOverlay(RED), FakeOverlay(BLUE))
+def test_each_windows_overlays_get_only_that_windows_input():
+    on_game, on_desk = FakeOverlay(RED), FakeOverlay(BLUE)
+    screens = [Screen(FakeRenderer(), (on_game,)), Screen(FakeRenderer("desk"), (on_desk,))]
+    click_on_desk = event(pygame.MOUSEBUTTONDOWN, window="desk", pos=(40, 50), button=1)
 
-    run(FakeGame(), DeskSceneSource(), FakeRenderer([click]), overlays=overlays, max_frames=1)
+    run(FakeGame(), DeskSceneSource(), screens, max_frames=1, poll=scripted(click_on_desk))
 
-    assert [pygame.MOUSEBUTTONDOWN in overlay.events for overlay in overlays] == [True, True]
+    assert (on_game.events, on_desk.events) == ([], [pygame.MOUSEBUTTONDOWN])
 
 
 def test_overlays_draw_in_order_onto_the_layer_the_renderer_lays_on_top():
-    renderer = FakeRenderer()
+    renderer, screens = one_window(FakeOverlay(RED), FakeOverlay(BLUE))
 
-    run(FakeGame(), DeskSceneSource(), renderer, (FakeOverlay(RED), FakeOverlay(BLUE)), 1)
+    run(FakeGame(), DeskSceneSource(), screens, max_frames=1, poll=scripted())
 
     assert renderer.layers[0].get_at(SPOT) == BLUE
 
 
 def test_the_layer_starts_clear_every_frame():
-    renderer = FakeRenderer()
+    renderer, screens = one_window(FakeOverlay(RED, frames=1))
 
-    run(FakeGame(), DeskSceneSource(), renderer, (FakeOverlay(RED, frames=1),), max_frames=2)
+    run(FakeGame(), DeskSceneSource(), screens, max_frames=2, poll=scripted())
 
     assert renderer.layers[1].get_at(SPOT).a == 0  # drawn on frame 1 only, so gone on frame 2
 
 
-def test_escape_stops_before_drawing_anything():
-    escape = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
-    renderer = FakeRenderer([escape])
-
-    run(FakeGame(), DeskSceneSource(), renderer, max_frames=5)
-
-    assert renderer.views == []
-
-
 def test_overlays_put_their_paper_on_the_wall_the_renderer_gets():
-    renderer = FakeRenderer()
+    renderer, screens = one_window(FakeOverlay(RED, paper=(0, 200, 0)))
 
-    run(FakeGame(), DeskSceneSource(), renderer, (FakeOverlay(RED, paper=(0, 200, 0)),), 1)
+    run(FakeGame(), DeskSceneSource(), screens, max_frames=1, poll=scripted())
 
     assert renderer.walls[0].get_at(SPOT)[:3] == (0, 200, 0)
 
 
 def test_the_wall_starts_bare_every_frame():
-    renderer = FakeRenderer()
-    overlay = FakeOverlay(RED, frames=1, paper=(0, 200, 0))
+    renderer, screens = one_window(FakeOverlay(RED, frames=1, paper=(0, 200, 0)))
 
-    run(FakeGame(), DeskSceneSource(), renderer, (overlay,), max_frames=2)
+    run(FakeGame(), DeskSceneSource(), screens, max_frames=2, poll=scripted())
 
     assert renderer.walls[1].get_at(SPOT)[:3] == (255, 255, 255)  # bare wall is white
+
+
+def test_escape_in_any_window_stops_everything_before_drawing():
+    game_window, desk_window = FakeRenderer(), FakeRenderer("desk")
+    escape_on_desk = event(pygame.KEYDOWN, window="desk", key=pygame.K_ESCAPE)
+    screens = [Screen(game_window), Screen(desk_window)]
+
+    run(FakeGame(), DeskSceneSource(), screens, max_frames=5, poll=scripted(escape_on_desk))
+
+    assert (game_window.views, desk_window.views) == ([], [])
+
+
+def test_closing_any_window_stops_everything():
+    game_window, desk_window = FakeRenderer(), FakeRenderer("desk")
+    close_desk = event(pygame.WINDOWCLOSE, window="desk")
+
+    run(
+        FakeGame(),
+        DeskSceneSource(),
+        [Screen(game_window), Screen(desk_window)],
+        5,
+        scripted(close_desk),
+    )
+
+    assert game_window.views == []

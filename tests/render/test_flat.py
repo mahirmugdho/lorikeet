@@ -177,10 +177,23 @@ def test_terrain_casts_a_soft_shadow_below_it(renderer: FlatRenderer):
     assert sum(shadow) < sum(BACKDROP)
 
 
-def test_a_note_is_not_drawn_because_it_is_real_paper(renderer: FlatRenderer):
+def test_a_note_is_outlined_just_outside_its_edge(renderer: FlatRenderer):
+    note = Thing(id=1, kind="note", shape=LEDGE, position=(160, 90))  # 100..220, 60..120
+
+    screen = shown(renderer, View(things=(note,)))
+
+    assert min(min(pixel(screen, x, y)) for x in range(130, 190) for y in range(48, 60)) < 120
+
+
+def test_a_notes_paper_is_left_unlit(renderer: FlatRenderer):
+    # Light on the paper would shift its colour for the camera (ADR 0006), so only the
+    # outline, outside the edge, is drawn.
     note = Thing(id=1, kind="note", shape=LEDGE, position=(160, 90))
 
-    assert pygame.transform.average_color(shown(renderer, View(things=(note,))))[:3] == BACKDROP
+    screen = shown(renderer, View(things=(note,)))
+
+    inside = pygame.Rect(108, 68, 104, 44)
+    assert pygame.transform.average_color(screen, inside)[:3] == BACKDROP
 
 
 @pytest.mark.parametrize("pose", ["off", "on"])
@@ -215,3 +228,10 @@ def test_the_egg_has_a_darker_rim_so_it_shows_up_on_paper(renderer: FlatRenderer
     screen = shown(renderer, View(things=(egg,)))
 
     assert sum(pixel(screen, 179, 90)) < sum(pixel(screen, 160, 90)) - 60
+
+
+def test_the_game_window_takes_its_own_input_and_leaves_the_desks(renderer: FlatRenderer):
+    mine = pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=(10, 10), button=1, window=None)
+    desks = pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=(10, 10), button=1, window="desk")
+
+    assert renderer.events([mine, desks]) == [mine]

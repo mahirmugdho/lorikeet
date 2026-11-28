@@ -66,12 +66,15 @@ def test_the_go_spot_is_off_until_a_note_is_on_it():
     assert (off.pose, on.pose) == ("off", "on")
 
 
-def test_lori_and_her_nest_are_shown_at_the_nest():
+def test_lori_sits_in_her_nest():
     view = shown()
     (nest,), (lori,) = of_kind(view, "nest"), of_kind(view, "bird")
 
     assert nest.position == LEVEL.nest.at
-    assert math.dist(lori.position, LEVEL.nest.at) < 120  # beside her nest
+    assert isinstance(nest.shape, Circle)
+    assert math.dist(lori.position, nest.position) < nest.shape.radius  # in it...
+    assert lori.position[1] < nest.position[1]  # ...sticking up out of it...
+    assert nest.layer > lori.layer  # ...with the nest in front, hiding her lower half
 
 
 def test_lori_is_laying_while_the_next_egg_is_coming():
@@ -90,15 +93,26 @@ def test_the_egg_is_shown_where_it_is():
     for _ in range(round((LAY_DELAY + 0.5) * 120)):
         game.update(scene, 1 / 120)
 
-    (egg,) = of_kind(game.view(), "egg")
+    view = game.view()
+    (egg,), (nest,) = of_kind(view, "egg"), of_kind(view, "nest")
 
     assert egg.position == game.egg
+    assert egg.layer > nest.layer  # in front, so it's seen coming out of the nest
 
 
 def test_stuck_down_notes_are_shown_as_notes_and_notes_in_a_hand_are_not():
     view = shown(note(1, (500, 200)), note(2, (300, 450), PieceState.MOVING))
 
     assert len(of_kind(view, "note")) == 1
+
+
+def test_the_note_on_the_go_spot_is_shown_too():
+    # It isn't ground, but it's stuck down, so it's outlined like the rest.
+    view = shown(GO_NOTE, note(1, (500, 200)))
+
+    assert sorted(thing.position for thing in of_kind(view, "note")) == sorted(
+        [LEVEL.go.at, (500, 200)]
+    )
 
 
 def test_the_egg_is_drawn_in_front_of_everything_else():

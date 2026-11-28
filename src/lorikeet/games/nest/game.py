@@ -63,9 +63,12 @@ so any other colour is plain ground."""
 _BLOSSOM, _GO, _NEST, _LORI, _MESSAGE, _HINT = 1, 2, 3, 4, 5, 6
 _TERRAIN, _EGGS, _NOTES = 100, 1000, 100_000
 
-NEST_RADIUS, LORI_RADIUS = 40.0, 34.0
-LORI_FROM_NEST = (-70.0, -14.0)
-"""Where Lori sits: just left of her nest, facing it."""
+NEST_RADIUS, LORI_RADIUS = 40.0, 46.0
+"""Lori is a good deal bigger than her egg (`EGG_RADIUS`), and a little wider than her nest's
+circle: the nest's bowl is drawn wider than its circle."""
+LORI_FROM_NEST = (-4.0, -6.0)
+"""Where Lori sits: in her nest, sunk into it. The nest is in front of her in the View (a
+higher layer), so its front hides her lower half and she sticks up out of it."""
 
 START_HINT = "Stick a note on the go ring to start"
 WON_MESSAGE = "Lori's egg made it!"
@@ -106,7 +109,8 @@ class NestGame:
         self.outcomes: list[Outcome] = []
         """How each egg so far has ended, oldest first."""
         self._world = World(self.level)
-        self._ground: tuple[Piece, ...] = ()  # the notes that are ground right now
+        self._placed: tuple[Piece, ...] = ()  # the notes stuck down right now
+        self._ground: tuple[Piece, ...] = ()  # those of them that are ground (not the go note)
         self._go_on = False
         self._until_egg = LAY_DELAY
         self._closest = math.inf  # the egg's closest distance to the blossom so far
@@ -130,10 +134,10 @@ class NestGame:
             # The wall is clear after a win: on to the next level (or this one again).
             self._index = (self._index + 1) % len(self._levels)
             self._start()
-        placed = [piece for piece in scene.pieces if piece.state in _PLACED]
-        go_notes = {piece.id for piece in placed if _on(self.level.go, piece.center)}
+        self._placed = tuple(piece for piece in scene.pieces if piece.state in _PLACED)
+        go_notes = {piece.id for piece in self._placed if _on(self.level.go, piece.center)}
         self._go_on = bool(go_notes)
-        self._ground = tuple(piece for piece in placed if piece.id not in go_notes)
+        self._ground = tuple(piece for piece in self._placed if piece.id not in go_notes)
         self._world.set_notes(
             (piece, NOTE_KINDS.get(piece.color, NoteKind.SOLID)) for piece in self._ground
         )
@@ -144,10 +148,12 @@ class NestGame:
             self._step()
 
     def view(self) -> View:
-        """What to show: the ground, the go spot, the notes, Lori and her nest, the blossom,
-        and the egg in front. The notes are listed for renderers that want them (a 3D one
-        can cast their shadows); a flat renderer draws nothing for them, because they're
-        real paper on the wall, or the desk's sketched paper."""
+        """What to show: the ground, the go spot, the notes, the blossom, Lori sitting in her
+        nest (the nest a layer in front of her), and the egg in front of them all, so it's
+        seen coming up out of the nest. Every stuck-down note is listed, the go note too, so
+        renderers can answer it: the flat and sketch looks outline it, and a 3D one can cast
+        its shadow. None of them draws the paper itself, which is real paper on the wall (or
+        the desk's sketched paper)."""
         level, state = self.level, self.state
         things = [
             Thing(_TERRAIN + i, "terrain", *_centred(polygon))
@@ -158,12 +164,11 @@ class NestGame:
                 _GO, "go", Circle(level.go.radius), level.go.at, pose="on" if self._go_on else "off"
             )
         )
-        for piece in self._ground:
+        for piece in self._placed:
             shape, centre = _centred(piece.outline)
             things.append(
                 Thing(_NOTES + piece.id, "note", shape, centre, layer=1, pose=piece.state.value)
             )
-        things.append(Thing(_NEST, "nest", Circle(NEST_RADIUS), level.nest.at, layer=1))
         won = state is State.WON
         things.append(
             Thing(
@@ -178,7 +183,9 @@ class NestGame:
         nest_x, nest_y = level.nest.at
         lori_pose = "happy" if won else "laying" if state is State.LAYING else "idle"
         lori_at = (nest_x + LORI_FROM_NEST[0], nest_y + LORI_FROM_NEST[1])
-        things.append(Thing(_LORI, "bird", Circle(LORI_RADIUS), lori_at, layer=2, pose=lori_pose))
+        things.append(Thing(_LORI, "bird", Circle(LORI_RADIUS), lori_at, layer=1, pose=lori_pose))
+        # The nest after her and a layer up: she sits in it, so its front is in front of her.
+        things.append(Thing(_NEST, "nest", Circle(NEST_RADIUS), level.nest.at, layer=2))
         egg = self._world.egg
         if egg is not None:
             things.append(
