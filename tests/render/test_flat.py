@@ -7,7 +7,8 @@ import pygame
 import pytest
 
 from lorikeet.render.flat import BACKDROP, FlatRenderer, native_pixel_settings, stretch_warning
-from lorikeet.view import Circle, Outline, Thing, View
+from lorikeet.render.flat_looks import DEFAULT_FILL
+from lorikeet.view import Circle, Outline, Text, Thing, View
 
 # The headless driver has no GPU renderer, so SCALED falls back to a slower one and says so.
 pytestmark = pytest.mark.filterwarnings("ignore:no fast renderer available")
@@ -67,7 +68,8 @@ def test_a_thing_is_drawn_where_it_is(renderer: FlatRenderer):
 
 
 def test_an_outline_is_turned_by_its_angle(renderer: FlatRenderer):
-    upright = Thing(id=1, kind="terrain", shape=BAR, position=(160, 90), angle=math.pi / 2)
+    # A kind the renderer has no look for: plain and shadowless, so only the turn shows.
+    upright = Thing(id=1, kind="plank", shape=BAR, position=(160, 90), angle=math.pi / 2)
 
     screen = shown(renderer, View(things=(upright,)))
 
@@ -150,3 +152,80 @@ def test_a_warning_names_both_sizes_when_the_display_could_show_more():
 
 def test_no_warning_when_the_display_lists_no_modes():
     assert stretch_warning(1, (1920, 1080), []) is None
+
+
+LEDGE = Outline(((-60, -30), (60, -30), (60, 30), (-60, 30)))  # at (160, 90): 100..220, 60..120
+
+
+def test_terrain_has_rounded_corners(renderer: FlatRenderer):
+    ledge = Thing(id=1, kind="terrain", shape=LEDGE, position=(160, 90))
+
+    screen = shown(renderer, View(things=(ledge,)))
+
+    assert pixel(screen, 160, 90) != BACKDROP  # filled in the middle
+    # Its top-left corner is rounded off. The soft shadow, offset down and right, can still
+    # reach it by a level or two, so it's compared within a small tolerance.
+    corner = pixel(screen, 100, 60)
+    assert max(abs(a - b) for a, b in zip(corner, BACKDROP, strict=True)) <= 4
+
+
+def test_terrain_casts_a_soft_shadow_below_it(renderer: FlatRenderer):
+    ledge = Thing(id=1, kind="terrain", shape=LEDGE, position=(160, 90))
+
+    shadow = pixel(shown(renderer, View(things=(ledge,))), 160, 124)  # just under its bottom
+
+    assert sum(shadow) < sum(BACKDROP)
+
+
+def test_a_note_is_not_drawn_because_it_is_real_paper(renderer: FlatRenderer):
+    note = Thing(id=1, kind="note", shape=LEDGE, position=(160, 90))
+
+    assert pygame.transform.average_color(shown(renderer, View(things=(note,))))[:3] == BACKDROP
+
+
+@pytest.mark.parametrize("pose", ["off", "on"])
+def test_the_go_spot_leaves_its_middle_unlit_for_the_note_on_it(renderer: FlatRenderer, pose: str):
+    # Light inside the spot would land on the real note there and shift its colour (ADR 0006).
+    go = Thing(id=1, kind="go", shape=Circle(40), position=(160, 90), pose=pose)
+
+    assert pixel(shown(renderer, View(things=(go,))), 160, 90) == BACKDROP
+
+
+def test_a_kind_without_a_look_gets_the_plain_default(renderer: FlatRenderer):
+    thing = Thing(id=1, kind="mystery", shape=Circle(20), position=(160, 90))
+
+    assert pixel(shown(renderer, View(things=(thing,))), 160, 90) == DEFAULT_FILL
+
+
+def test_text_is_written_centred_where_it_is(renderer: FlatRenderer):
+    words = Thing(id=1, kind="message", shape=Text("Hello", size=40), position=(160, 90))
+
+    screen = shown(renderer, View(things=(words,)))
+
+    around = pygame.Rect(100, 70, 120, 40)
+    assert pygame.transform.average_color(screen, around)[:3] != BACKDROP
+    assert pygame.transform.average_color(screen, pygame.Rect(0, 0, 60, 40))[:3] == BACKDROP
+
+
+def test_the_egg_has_a_darker_rim_so_it_shows_up_on_paper(renderer: FlatRenderer):
+    # The picture lands on paper notes like light, so a nearly white egg on a green note is
+    # just slightly brighter green. A darker rim keeps its outline visible.
+    egg = Thing(id=1, kind="egg", shape=Circle(20), position=(160, 90))
+
+    screen = shown(renderer, View(things=(egg,)))
+
+    assert sum(pixel(screen, 179, 90)) < sum(pixel(screen, 160, 90)) - 60
+
+
+def test_a_broken_egg_is_open_at_the_top_with_its_top_half_lying_beside_it(
+    renderer: FlatRenderer,
+):
+    whole = Thing(id=1000, kind="egg", shape=Circle(28), position=(160, 120))
+    broken = Thing(id=1000, kind="egg", shape=Circle(28), position=(160, 120), pose="broken")
+
+    intact, cracked = (shown(renderer, View(things=(t,))).copy() for t in (whole, broken))
+
+    assert pixel(intact, 160, 100) != BACKDROP  # the whole egg's shell is there...
+    assert pixel(cracked, 160, 100) == BACKDROP  # ...the broken one's top half isn't
+    assert pixel(cracked, 160, 135) != BACKDROP  # its bottom half is
+    assert pixel(cracked, 197, 130) != BACKDROP  # and its top half lies beside it

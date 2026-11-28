@@ -1,5 +1,6 @@
 """The launcher: picks an input, a renderer and an output, and runs a game between them.
 
+- game: what's played. `nest` (the default), or `none` for an empty desk.
 - input: where scenes come from. `desk` for now; `camera` arrives with detection.
 - renderer: how the game's `View` is drawn. `flat` for now; more later (ADR 0008).
 - output: where the renderer's window goes. `window` on this screen, or `projector`.
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from collections.abc import Callable, Sequence
 from typing import Protocol
 
@@ -28,6 +30,8 @@ from lorikeet.desk.mouse import DeskMouse
 from lorikeet.desk.overlay import DeskOverlay
 from lorikeet.desk.palette import Palette
 from lorikeet.desk.source import DeskSceneSource
+from lorikeet.games.nest.game import NestGame
+from lorikeet.games.nest.level import level_ids, load_level
 from lorikeet.interface import Scene, SceneSource
 from lorikeet.render import Renderer
 from lorikeet.render.flat import FlatRenderer
@@ -89,18 +93,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         renderer = RENDERERS[args.renderer](args.output, args.size, args.display)
         try:
+            game = _open_game(args.game, args.level, renderer.size)
             source = _open_desk()
             palette = Palette(tuple(_piece_colors()), renderer.size)
             # Debug goes last, so its outlines and labels sit on top of the desk's paper.
             overlays = (DeskOverlay(source, DeskMouse(source, palette)), DebugOverlay(source))
             width, height = renderer.size
-            print(f"lorikeet: {args.input} -> {args.renderer} {args.output}, {width}x{height}")
+            print(
+                f"lorikeet: {args.game} ({args.level}), {args.input} -> {args.renderer} "
+                f"{args.output}, {width}x{height}"
+            )
             print(
                 "drag notes from the palette or around the surface, roll the wheel to turn "
                 "the one you hold, right-click peels one off, Tab hides the palette, D shows "
                 "what games are told, Esc quits"
             )
-            run(NoGame(), source, renderer, overlays)
+            if args.game == "nest":
+                print("stick a note on the go spot to start the eggs")
+            run(game, source, renderer, overlays)
         finally:
             renderer.close()
     finally:
@@ -111,6 +121,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="lorikeet", description="Run Lorikeet with a chosen input, renderer and output."
+    )
+    parser.add_argument("--game", choices=["nest", "none"], default="nest", help="what to play")
+    levels = level_ids()
+    parser.add_argument(
+        "--level", choices=levels, default=levels[0], help="which Nest level (default: the first)"
     )
     parser.add_argument("--input", choices=["desk"], default="desk", help="where notes come from")
     parser.add_argument(
@@ -166,6 +181,23 @@ def run(
             overlay.draw(layer)
         renderer.draw(game.view(), wall, layer)
         frames += 1
+
+
+def _open_game(name: str, level_id: str, canvas: tuple[int, int]) -> Game:
+    if name == "none":
+        return NoGame()
+    ids = level_ids()
+    start = ids.index(level_id)
+    # The chosen level first, then the rest in order, coming round to the start again.
+    first, *more = (load_level(i) for i in ids[start:] + ids[:start])
+    level = first
+    if level.size != canvas:
+        print(
+            f"lorikeet: {level_id} is laid out for {level.size[0]}x{level.size[1]}, but the "
+            f"canvas is {canvas[0]}x{canvas[1]}, so it won't fit the screen exactly.",
+            file=sys.stderr,
+        )
+    return NestGame(first, *more)
 
 
 def _open_desk() -> DeskSceneSource:

@@ -19,7 +19,7 @@ CI has no camera and no display, so everything below runs headless.
 | Detection _(Phase 1)_ | Synthetic images (numpy-drawn notes) plus fixture photos of real notes, asserting count, colour, and corners within tolerance | `tests/test_detection.py`, `tests/fixtures/` |
 | Tracking _(Phase 2)_ | Timed sequences of detections: ids stay stable, a piece hidden for less than `LORIKEET_HIDDEN_SECONDS` survives, a moved piece gets a new id | `tests/test_tracking.py` |
 | Interface _(Phase 1)_ | Pieces reject bad shapes; `changes()` reports placed and removed for each state change; `FakeSceneSource` plays scripted scenes | `tests/test_interface.py` |
-| Games _(Phase 3–4)_ | Scripted scenes, then assert game rules (ball reaches goal, tower built on placed) | `tests/games/` |
+| Games _(Phase 3–4)_ | Scripted scenes, then assert game rules (ball reaches goal, tower built on placed). Nest: level files load strictly; each level's stored solution wins and the go note alone doesn't; eggs, note colours, win and replay rules; the same notes always play out the same, at any frame rate | `tests/games/` |
 | Desk | A fake clock drives desk notes through tracking's rules (settle, hidden grace, new id when moved); mouse drags, the palette and the sketch overlay (including the boil's timing) are checked on plain surfaces | `tests/desk/` |
 | View | Outlines are placed and turned clockwise; ids are unique; things come back to front by layer | `tests/test_view.py` |
 | Renderers | The flat renderer on SDL's headless driver: things drawn where they are and turned by their angle, the overlay layer laid on top | `tests/render/` |

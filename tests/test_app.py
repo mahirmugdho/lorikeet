@@ -89,6 +89,21 @@ def test_defaults_are_the_desk_in_a_1920x1080_window_drawn_flat():
     )
 
 
+def test_the_default_game_is_nest_from_its_first_level():
+    args = parse_args([])
+
+    assert (args.game, args.level) == ("nest", "01-first-hop")
+
+
+def test_no_game_can_be_chosen_for_an_empty_desk():
+    assert parse_args(["--game", "none"]).game == "none"
+
+
+def test_a_level_that_does_not_exist_is_rejected():
+    with pytest.raises(SystemExit):
+        parse_args(["--level", "99-nope"])
+
+
 def test_size_is_given_as_width_x_height():
     assert parse_args(["--size", "1280x720"]).size == (1280, 720)
 

@@ -1,0 +1,17 @@
+{
+  "format": 1,
+  "name": "First hop",
+  "size": [1920, 1080],
+  "note_size": 100,
+  "nest": {"at": [200, 380], "launch": [380, -200]},
+  "blossom": {"at": [1400, 455], "radius": 45},
+  "go": {"at": [130, 920], "radius": 70},
+  "terrain": [
+    {"box": [0, 420, 700, 60]},
+    {"box": [860, 500, 1060, 60]}
+  ],
+  "timeout_s": 8,
+  "solution": [
+    {"at": [745, 490], "angle": 5}
+  ]
+}

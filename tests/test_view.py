@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from lorikeet.view import Circle, Outline, Thing, View
+from lorikeet.view import Circle, Outline, Text, Thing, View
 
 SQUARE = Outline(((-5, -5), (5, -5), (5, 5), (-5, 5)))  # 10 px, around its own origin
 
@@ -50,3 +50,13 @@ def test_back_to_front_orders_by_layer_and_keeps_order_within_a_layer():
     view = View(things=(thing(1, 2), thing(2, 0), thing(3, 2), thing(4, 1)))
 
     assert [t.id for t in view.back_to_front()] == [2, 4, 1, 3]
+
+
+def test_text_needs_some_words():
+    with pytest.raises(ValueError, match="text"):
+        Text("  ", size=30)
+
+
+def test_text_needs_a_positive_size():
+    with pytest.raises(ValueError, match="size"):
+        Text("Hello", size=0)

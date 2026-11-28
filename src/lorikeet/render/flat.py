@@ -9,8 +9,7 @@ It asks each system for the display's own pixels, so the desktop doesn't stretch
 calibration measures wherever the canvas lands, but a stretched picture is softer and costs
 more pixels to draw.
 
-For now every kind of thing gets the same plain look. Real looks per kind (soft colours,
-rounded shapes, light shadows) come with the first game, once there are kinds to draw.
+What each kind of thing looks like is in `flat_looks`.
 """
 
 from __future__ import annotations
@@ -21,15 +20,12 @@ from collections.abc import Mapping, Sequence
 
 import pygame
 
-from lorikeet.view import Circle, Thing, View
+from lorikeet.render.flat_looks import FlatLooks
+from lorikeet.view import View
 
 BACKDROP = (232, 230, 226)
 """A light, nearly grey backdrop: shadows show on it, and it adds almost no colour to real
 notes under the projector, because detection keys on saturation (ADR 0006)."""
-
-DEFAULT_FILL = (150, 146, 140)
-DEFAULT_EDGE = (105, 101, 96)
-"""The plain look for kinds without one of their own."""
 
 
 class FlatRenderer:
@@ -51,6 +47,7 @@ class FlatRenderer:
             pygame.display.init()
         pygame.display.set_caption("Lorikeet")
         self._canvas = _open_projector(display) if output == "projector" else _open_window(size)
+        self._looks = FlatLooks()
 
     @property
     def size(self) -> tuple[int, int]:
@@ -62,7 +59,7 @@ class FlatRenderer:
     def draw(self, view: View, wall: pygame.Surface, layer: pygame.Surface) -> None:
         self._canvas.fill(BACKDROP)
         for thing in view.back_to_front():
-            _draw_thing(self._canvas, thing)
+            self._looks.draw(self._canvas, thing)
         # The picture lands on what's on the wall (see Renderer): white leaves it as it is.
         self._canvas.blit(wall, (0, 0), special_flags=pygame.BLEND_MULT)
         # What's in front of the wall, laid on top as it is. It's premultiplied (see Renderer).
@@ -107,16 +104,6 @@ def stretch_warning(
         f"{most_w}x{most_h}. If it's set to scale above 100%, set it to 100% for a sharp, "
         "full-resolution picture."
     )
-
-
-def _draw_thing(canvas: pygame.Surface, thing: Thing) -> None:
-    if isinstance(thing.shape, Circle):
-        pygame.draw.circle(canvas, DEFAULT_FILL, thing.position, thing.shape.radius)
-        pygame.draw.circle(canvas, DEFAULT_EDGE, thing.position, thing.shape.radius, 2)
-    else:
-        points = thing.shape.placed(thing.position, thing.angle)
-        pygame.draw.polygon(canvas, DEFAULT_FILL, points)
-        pygame.draw.polygon(canvas, DEFAULT_EDGE, points, 2)
 
 
 def _open_window(size: tuple[int, int]) -> pygame.Surface:
