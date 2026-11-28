@@ -12,6 +12,7 @@ import pytest
 from panda3d.core import Camera, NodePath
 
 import lorikeet.render.clay.scene as scene_module
+from lorikeet.render.clay.builder import BuildNow
 from lorikeet.render.clay.coords import to_world
 from lorikeet.render.clay.detail import clay_detail
 from lorikeet.render.clay.figure import Figure, Piece, build
@@ -25,9 +26,18 @@ def ball(thing: Thing) -> Figure:
     return Figure((Piece(Ellipsoid((0, 0, 0), (3, 3, 3)), "c"),), {"c": (90, 90, 90)})
 
 
+QUICK = BuildNow(lambda figure, step: build(figure, 1.0))  # coarse, and no disk cache
+
+
+def stage() -> Stage:
+    base = SimpleNamespace(
+        render=NodePath("render"), render2d=NodePath("render2d"), cam=NodePath(Camera("cam"))
+    )
+    return Stage(base, (320, 180), clay_detail(size=32), Light())
+
+
 @pytest.fixture
 def clay(monkeypatch) -> ClayScene:
-    monkeypatch.setattr(scene_module, "built", lambda f, step: build(f, 1.0))  # no disk cache
     monkeypatch.setattr(
         scene_module,
         "LOOKS",
@@ -36,14 +46,11 @@ def clay(monkeypatch) -> ClayScene:
             "terrain": Look(ball, step=1.0, boil=0.2, jitter=0.0),
         },
     )
-    base = SimpleNamespace(
-        render=NodePath("render"), render2d=NodePath("render2d"), cam=NodePath(Camera("cam"))
-    )
-    return ClayScene(Stage(base, (320, 180), clay_detail(size=32), Light()))
+    return ClayScene(stage(), QUICK)
 
 
 def placed(clay: ClayScene, name: str) -> NodePath:
-    found = clay.stage.root.find(name)
+    found = clay.stage.root.find(f"**/{name}")
     assert not found.isEmpty(), name
     return found
 
@@ -69,13 +76,25 @@ def test_figures_jitter_a_little_and_hold_it_for_a_stop_motion_frame(clay):
     assert positions[1] != positions[2]
 
 
-def test_notes_only_cast_shadows(clay):
+def test_a_note_casts_a_shadow_and_gets_a_rope_round_it_but_no_figure(clay):
     note = Thing(100_001, "note", Outline(((-50, -50), (50, -50), (50, 50), (-50, 50))), (200, 90))
     clay.show(View((note,)), now=0.0)
 
     box = placed(clay, "note shadow")
-    assert box.isHidden(SEEN)  # the camera never draws it
+    assert box.isHidden(SEEN)  # the camera never draws the paper's stand-in
     assert not box.isHidden()  # but the light does
+    outline = placed(clay, "note rope")
+    assert not outline.isHidden(SEEN)  # the rope round it is seen
+    assert tuple(placed(clay, "note 100001").getPos()) == pytest.approx(to_world((200, 90)))
+
+
+def test_the_go_ring_is_pressed_onto_the_backdrop(clay, monkeypatch):
+    monkeypatch.setitem(
+        scene_module.LOOKS, "go", Look(ball, step=1.0, boil=0.3, jitter=0.0, depth=37.0)
+    )
+    clay.show(View((Thing(2, "go", Circle(70), (130, 920)),)), now=0.0)
+
+    assert placed(clay, "go 2").getPos()[1] == pytest.approx(37.0)
 
 
 def test_things_that_leave_the_view_leave_the_set(clay):
@@ -91,3 +110,38 @@ def test_kinds_without_a_clay_look_are_left_out(clay):
     clay.show(View((words,)), now=0.0)
 
     assert clay.stage.root.find("message 5").isEmpty()
+
+
+class Slow:
+    """A builder whose figures take two frames to be ready."""
+
+    def __init__(self) -> None:
+        self.asked: dict[object, int] = {}
+
+    def mesh(self, key, figure, step):
+        self.asked[key] = self.asked.get(key, 0) + 1
+        return build(figure(), 1.0) if self.asked[key] > 2 else None
+
+
+def test_a_thing_joins_the_set_once_its_figure_is_built(clay):
+    clay.builder = Slow()
+    lori = Thing(4, "bird", Circle(34), (100, 80), pose="idle")
+
+    clay.show(View((lori,)), now=0.0)
+    clay.show(View((lori,)), now=0.02)
+    assert clay.stage.root.find("**/bird 4").isEmpty()  # not ready: left out, no stall
+
+    clay.show(View((lori,)), now=0.04)
+    placed(clay, "bird 4")
+
+
+def test_newly_built_figures_can_join_one_a_frame(clay):
+    clay._new_per_frame = 1
+    lori = Thing(4, "bird", Circle(34), (100, 80), pose="idle")
+    ledge = Thing(100, "terrain", Outline(((-20, -5), (20, -5), (20, 5), (-20, 5))), (60, 150))
+
+    clay.show(View((lori, ledge)), now=0.0)
+    assert clay.stage.root.find("**/terrain 100").isEmpty()  # the second waits a frame
+    clay.show(View((lori, ledge)), now=0.02)
+    placed(clay, "bird 4")
+    placed(clay, "terrain 100")

@@ -195,6 +195,40 @@ class ClayMesh:
     `Figure.part_weights`). Column 0 is the body."""
 
 
+@dataclass(frozen=True)
+class Packed:
+    """A mesh laid out as the graphics card takes it, ready to copy straight across."""
+
+    rows: np.ndarray
+    """(n, 26) float32, one row per vertex: position (3), normal (3), tint (3), occlusion
+    (1), the distance to each clay (12) and each part's weight (4)."""
+    triangles: np.ndarray
+    """(m, 3) uint32."""
+    palette: np.ndarray
+    """(MAX_CLAYS, 3) float32, linear light."""
+
+
+def pack(mesh: ClayMesh) -> Packed:
+    """Lay a mesh out for the graphics card. It takes some milliseconds for a big figure,
+    so the clay renderer does it while building, away from the game (see `builder.py`)."""
+    rows = np.concatenate(
+        [
+            mesh.positions,
+            mesh.normals,
+            mesh.tint,
+            mesh.occlusion[:, None],
+            mesh.clay_distances,
+            mesh.part_weights,
+        ],
+        axis=1,
+    )
+    return Packed(
+        np.ascontiguousarray(rows, dtype=np.float32),
+        np.ascontiguousarray(mesh.triangles, dtype=np.uint32),
+        np.asarray(mesh.palette, dtype=np.float32),
+    )
+
+
 def build(figure: Figure, step: float) -> ClayMesh:
     """Mesh the figure with triangles about `step` pixels across, work out its clays and
     bake its occlusion."""

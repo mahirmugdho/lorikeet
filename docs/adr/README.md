@@ -19,3 +19,4 @@ An ADR is a short note recording one decision: the context, the options, what we
 | [0006](0006-classical-color-detection.md)       | Detect notes with HSV colour segmentation, not ML                   | Proposed                     |
 | [0007](0007-camera-frames-stay-local.md)        | Camera frames stay in memory on this machine                        | Proposed                     |
 | [0008](0008-games-describe-a-view.md)           | Games describe a View; the renderer a player picks draws it         | Proposed                     |
+| [0009](0009-panda3d-for-the-clay-renderer.md)   | Draw the clay look with Panda3D                                     | Proposed                     |

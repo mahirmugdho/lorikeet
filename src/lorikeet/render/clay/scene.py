@@ -14,8 +14,10 @@ How a thing's View maps onto the set:
   full frame rate. On top, each figure gets its tiny per-frame jitter, and its clay boils,
   12 times a second. Ledges don't jitter (they're the physics' ground, and a set is glued
   down); their clay still creeps a little.
-- **Notes** are real paper on the wall, so they get no figure, only an invisible box that
-  casts their shadow onto the set (`stage.shadow_box`).
+- **Notes** are real paper on the wall, so they get no figure: an invisible box that casts
+  their shadow onto the set (`stage.shadow_box`), and a rope of dark clay just outside the
+  paper (`rope.py`), so players see the note counts.
+- **The go ring** is pressed onto the backdrop, round the spot where the go note goes.
 - Kinds without a clay look yet (the words, for now) aren't drawn.
 """
 
@@ -26,12 +28,13 @@ from dataclasses import dataclass
 
 from panda3d.core import NodePath
 
-from lorikeet.render.clay.cache import built
+from lorikeet.render.clay.builder import BuildNow, Builds
 from lorikeet.render.clay.coords import heading, to_world
 from lorikeet.render.clay.figure import Figure
-from lorikeet.render.clay.kinds import blossom, egg, go_ring, ledge, nest
+from lorikeet.render.clay.kinds import GO_RING_TUBE, blossom, egg, go_ring, ledge, nest
 from lorikeet.render.clay.lori import lori
 from lorikeet.render.clay.motion import Animator, bird_parts, frame_of, jitter
+from lorikeet.render.clay.rope import rope
 from lorikeet.render.clay.stage import BACKDROP_DEPTH, Stage, figure_node, pose, shadow_box
 from lorikeet.view import Circle, Outline, Thing, View
 
@@ -43,6 +46,10 @@ bowl, see `kinds.nest`), and the egg comes out one layer in front of it."""
 LORI_TURN = (-32.0, 12.0)
 """Lori's pose for the camera: turned 32 degrees to face us a little and tipped 12 towards
 us, as if seen from slightly above. Her figure faces +x, the way the game has her look."""
+
+NOTE_BOIL, NOTE_JITTER = 0.3, 0.5
+"""How much a note's rope creeps and jitters each stop-motion frame: a little, so it's alive
+like the figures but never strays onto the paper."""
 
 TIPPED = {"bird": LORI_TURN[1], "nest": LORI_TURN[1]}
 """Figures tipped towards the camera, as if seen from slightly above, in degrees. The nest
@@ -63,6 +70,9 @@ class Look:
     detail: float = 1.0
     """How strongly fingerprints and smudges show. Less on big flat faces, where the full
     amount reads as stucco rather than handled clay."""
+    depth: float | None = None
+    """Where it stands, in pixels behind the play layer, instead of where its layer puts it:
+    for things pressed onto the backdrop."""
 
 
 def _radius(thing: Thing) -> float:
@@ -81,10 +91,16 @@ LOOKS = {
     "egg": Look(lambda t: egg(_radius(t)), step=0.8, boil=0.3, jitter=0.6),
     "nest": Look(lambda t: nest(_radius(t)), step=1.0, boil=0.35, jitter=0.4),
     "blossom": Look(lambda t: blossom(_radius(t)), step=0.8, boil=0.4, jitter=0.8),
-    "go": Look(lambda t: go_ring(_radius(t)), step=1.2, boil=0.3, jitter=0.3),
+    "go": Look(
+        lambda t: go_ring(_radius(t)),
+        step=1.2,
+        boil=0.3,
+        jitter=0.3,
+        depth=BACKDROP_DEPTH - GO_RING_TUBE - 1,  # its back just touching the backdrop
+    ),
     "terrain": Look(
         lambda t: ledge(_outline(t), back=BACKDROP_DEPTH + 2),
-        step=1.5,
+        step=2.0,  # big and flat, and mostly hidden (only the front shows): a coarser grid
         boil=0.2,
         jitter=0.0,
         detail=0.4,
@@ -93,8 +109,16 @@ LOOKS = {
 
 
 class ClayScene:
-    def __init__(self, stage: Stage) -> None:
+    def __init__(self, stage: Stage, builder: Builds | None = None, new_per_frame: int = 0) -> None:
+        """`builder` makes the figures: built on the spot unless given (see `builder.py`).
+        `new_per_frame` limits how many newly built figures join the set in one frame (0: no
+        limit). Each has to be loaded onto the graphics card, which for a big one (Lori, a
+        ledge) takes some milliseconds, so in a live window they're let in one a frame,
+        rather than several landing in the same frame and making it late."""
         self.stage = stage
+        self.builder: Builds = builder if builder is not None else BuildNow()
+        self._new_per_frame = new_per_frame
+        self._new = 0  # newly built figures let in this frame
         self.animator = Animator()
         self._things: dict[
             int, tuple[object, NodePath, NodePath]
@@ -105,22 +129,25 @@ class ClayScene:
         """Bring the set up to date with `view`, at game time `now` (seconds)."""
         frame = frame_of(now)
         present = set()
+        self._new = 0
         for thing in view.things:
             if thing.kind == "note":
                 present.add(thing.id)
-                self._note(thing)
+                self._note(thing, frame)
                 continue
             look = LOOKS.get(thing.kind)
             if look is None:
                 continue
             present.add(thing.id)
-            place, figure = self._node(thing, look)
+            node = self._node(thing, look)
+            if node is None:
+                continue  # its figure is still being built: it joins the set when ready
+            place, figure = node
             j = jitter(thing.id, frame)
             amount = look.jitter
             x, y = thing.position
-            place.setPos(
-                *to_world((x + j.dx * amount, y + j.dy * amount), -LAYER_DEPTH * thing.layer)
-            )
+            depth = -LAYER_DEPTH * thing.layer if look.depth is None else look.depth
+            place.setPos(*to_world((x + j.dx * amount, y + j.dy * amount), depth))
             place.setR(heading(thing.angle) + j.turn * amount)
             place.setScale(1 + (j.scale - 1) * amount)
             figure.setShaderInput("boil_amount", look.boil)
@@ -133,18 +160,24 @@ class ClayScene:
             self._things.pop(thing_id)[1].removeNode()
         self.animator.forget(present)
 
-    def _node(self, thing: Thing, look: Look) -> tuple[NodePath, NodePath]:
-        """The thing's figure on the set, made the first time it's seen. A figure has a
-        `place` (where the game puts it) and inside it the figure itself."""
+    def _node(self, thing: Thing, look: Look) -> tuple[NodePath, NodePath] | None:
+        """The thing's figure on the set, made the first time it's seen, or None while its
+        figure is being built. A figure has a `place` (where the game puts it) and inside it
+        the figure itself."""
         key = (thing.kind, _outline(thing) if thing.kind == "terrain" else _radius(thing))
         known = self._things.get(thing.id)
         if known is not None and known[0] == key:
             return known[1], known[2]
         if known is not None:  # same thing, new size: start again
-            known[1].removeNode()
+            self._things.pop(thing.id)[1].removeNode()
         if key not in self._figures:
-            mesh = built(look.figure(thing), look.step)
+            if self._new_per_frame and self._new >= self._new_per_frame:
+                return None  # enough new figures this frame: this one can come next frame
+            mesh = self.builder.mesh(key, lambda: look.figure(thing), look.step)
+            if mesh is None:
+                return None
             self._figures[key] = figure_node(mesh, thing.kind)
+            self._new += 1
         place = self.stage.root.attachNewNode(f"{thing.kind} {thing.id}")
         holder = place
         if thing.kind in TIPPED:
@@ -157,15 +190,23 @@ class ClayScene:
         self._things[thing.id] = (key, place, figure)
         return place, figure
 
-    def _note(self, thing: Thing) -> None:
+    def _note(self, thing: Thing, frame: int) -> None:
+        """A stuck-down note's shadow box and rope, made when it's first seen (or reshaped).
+        The box stays exactly with the paper; the rope jitters and boils like a figure."""
         key = ("note", _outline(thing))
         known = self._things.get(thing.id)
         if known is None or known[0] != key:
             if known is not None:
                 known[1].removeNode()
-            box = shadow_box(_outline(thing), BACKDROP_DEPTH)
-            box.reparentTo(self.stage.root)
-            self._things[thing.id] = (key, box, box)
-        box = self._things[thing.id][1]
-        box.setPos(*to_world(thing.position))
-        box.setR(heading(thing.angle))
+            place = self.stage.root.attachNewNode(f"note {thing.id}")
+            shadow_box(_outline(thing), BACKDROP_DEPTH).reparentTo(place)
+            outline = figure_node(rope(_outline(thing), seed=thing.id % 1000), "note rope")
+            outline.reparentTo(place)
+            outline.setShaderInput("boil_amount", NOTE_BOIL)
+            self._things[thing.id] = (key, place, outline)
+        _, place, outline = self._things[thing.id]
+        place.setPos(*to_world(thing.position))
+        place.setR(heading(thing.angle))
+        j = jitter(thing.id, frame)
+        outline.setPos(j.dx * NOTE_JITTER, 0, -j.dy * NOTE_JITTER)
+        outline.setShaderInput("boil_seed", float(frame) + thing.id * 0.618)

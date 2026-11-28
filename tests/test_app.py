@@ -225,3 +225,29 @@ def test_closing_any_window_stops_everything():
     )
 
     assert game_window.views == []
+
+
+class OwnWindowRenderer(FakeRenderer):
+    """A renderer whose window isn't a pygame one (like the clay renderer's Panda3D window):
+    its input never reaches pygame's queue, it only comes back from `events`."""
+
+    def __init__(self, own: list[pygame.event.Event]) -> None:
+        super().__init__()
+        self.own = own
+
+    def events(self, pending: Sequence[pygame.event.Event]) -> list[pygame.event.Event]:
+        mine, self.own = self.own, []
+        return mine
+
+
+def test_escape_or_closing_a_window_that_isnt_pygames_stops_everything():
+    for quitting in (event(pygame.KEYDOWN, key=pygame.K_ESCAPE), event(pygame.WINDOWCLOSE)):
+        game_window = OwnWindowRenderer([quitting])
+
+        run(FakeGame(), DeskSceneSource(), [Screen(game_window)], 5, scripted())
+
+        assert game_window.views == []
+
+
+def test_the_clay_renderer_can_be_picked():
+    assert parse_args(["--renderer", "clay"]).renderer == "clay"

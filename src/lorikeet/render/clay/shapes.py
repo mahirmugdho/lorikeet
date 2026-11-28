@@ -267,7 +267,7 @@ class Slab:
     round: float
 
     def distance(self, p: np.ndarray) -> np.ndarray:
-        shrunk = _inset(np.asarray(self.outline, dtype=np.float64), self.round)
+        shrunk = inset(np.asarray(self.outline, dtype=np.float64), self.round)
         middle, half = (self.front + self.back) / 2, (self.back - self.front) / 2
         across = _polygon_distance(shrunk, p[:, [0, 2]])  # the outline shrunk by the rounding...
         deep = np.abs(p[:, 1] - middle) - (half - self.round)
@@ -282,7 +282,7 @@ class Slab:
         return low, high
 
 
-def _inset(polygon: np.ndarray, by: float) -> np.ndarray:
+def inset(polygon: np.ndarray, by: float) -> np.ndarray:
     """The polygon with every edge moved `by` inward, corners following along their mitre
     (the line halfway between the two edges). Right for convex outlines such as ledges and
     notes; a deep notch would fold over, which these shapes don't have."""

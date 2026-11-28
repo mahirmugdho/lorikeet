@@ -31,8 +31,9 @@ everything resting on a ledge (Lori's nest, the egg) stands on its top, not over
 
 def ledge(outline: tuple[tuple[float, float], ...], back: float) -> Figure:
     """A slab of rolled-out clay cut to `outline` (projector pixels around the ledge's
-    centre), from `LEDGE_FRONT` back to `back`, where it meets the backdrop, like a shelf. Its top edge is exactly where the physics has it; the edges
-    are rounded inside the outline and the whole slab is gently uneven."""
+    centre), from `LEDGE_FRONT` back to `back`, where it meets the backdrop, like a shelf.
+    Its top edge is exactly where the physics has it; the edges are rounded inside the
+    outline and the whole slab is gently uneven."""
     xz = tuple((x, -y) for x, y in outline)  # projector y is down; world z is up
     return Figure(
         (Piece(Slab(xz, front=LEDGE_FRONT, back=back, round=7.0), "ledge"),),
@@ -151,10 +152,14 @@ def blossom(radius: float) -> Figure:
     )
 
 
+GO_RING_TUBE = 6.0
+"""The go ring's thickness (its rope's radius), in pixels."""
+
+
 def go_ring(radius: float) -> Figure:
     """A plain grey clay ring, facing the camera, empty in the middle (the note goes
     there, and light under a note would change its colour for the camera)."""
-    tube = 6.0
+    tube = GO_RING_TUBE
     ring = Torus((0, 0, 0), radius - tube, tube, rotation(roll=90))
     return Figure(
         (Piece(ring, "ring"),),

@@ -62,7 +62,7 @@ from panda3d.core import (
 from lorikeet.render.clay.colour import linear
 from lorikeet.render.clay.coords import to_world
 from lorikeet.render.clay.detail import TILE, Detail
-from lorikeet.render.clay.figure import MAX_CLAYS, MAX_PARTS, ClayMesh
+from lorikeet.render.clay.figure import MAX_CLAYS, MAX_PARTS, ClayMesh, Packed, pack
 
 CAMERA_DISTANCE = 1000.0
 """How far in front of the play layer the camera sits. With an orthographic lens this
@@ -309,8 +309,8 @@ class Stage:
 
     def wall_layer(self) -> NodePath:
         """A card over the whole frame that multiplies the picture by the wall: white where
-        the wall is bare, paper where the desk's notes are (see `render/__init__.py`). Set
-        its texture with `set_wall`."""
+        the wall is bare, paper where the desk's notes are (see `render/__init__.py`). Give
+        it the wall's texture (`mirror.Mirror`)."""
         card = CardMaker("wall")
         card.setFrameFullscreenQuad()
         node = self.base.render2d.attachNewNode(card.generate())
@@ -371,29 +371,14 @@ def shadow_box(outline, back: float) -> NodePath:
     return node
 
 
-def set_wall(card: NodePath, wall_rgb: bytes, size: tuple[int, int]) -> None:
-    """Put the wall (8-bit RGB rows, top row first) on the wall card."""
-    width, height = size
-    texture = card.getTexture() if card.hasTexture() else None
-    if texture is None or texture.getXSize() != width or texture.getYSize() != height:
-        texture = Texture("wall")
-        texture.setup2dTexture(width, height, Texture.T_unsigned_byte, Texture.F_rgb)
-        texture.setMinfilter(SamplerState.FT_nearest)
-        texture.setMagfilter(SamplerState.FT_nearest)
-        card.setTexture(texture)
-    rows = np.frombuffer(wall_rgb, dtype=np.uint8).reshape(height, width, 3)
-    # Panda3D textures start at the bottom row, and keep blue, green, red.
-    texture.setRamImage(np.ascontiguousarray(rows[::-1, :, ::-1]).tobytes())
-
-
 _FORMAT: GeomVertexFormat | None = None
 
 
 def _vertex_format() -> GeomVertexFormat:
-    """Per vertex, in one interleaved array of floats: position, normal, colour (rgb: the
-    tint, a: occlusion), the distance to each clay in three groups of four, and the weight
-    of each movable part. Floats, not the usual 8-bit colour, so the occlusion's soft
-    gradients don't step."""
+    """Per vertex, in one interleaved array of floats, in the order `figure.pack` lays them
+    out: position, normal, colour (rgb: the tint, a: occlusion), the distance to each clay
+    in three groups of four, and the weight of each movable part. Floats, not the usual
+    8-bit colour, so the occlusion's soft gradients don't step."""
     global _FORMAT
     if _FORMAT is None:
         array = GeomVertexArrayFormat()
@@ -406,36 +391,26 @@ def _vertex_format() -> GeomVertexFormat:
     return _FORMAT
 
 
-def figure_node(mesh: ClayMesh, name: str) -> NodePath:
-    """A Panda3D node for a built mesh, with its clay colours. The arrays are copied
-    straight into Panda3D's vertex buffer, which is far faster than writing vertices one by
-    one from Python."""
-    rows = np.concatenate(
-        [
-            mesh.positions,
-            mesh.normals,
-            mesh.tint,
-            mesh.occlusion[:, None],
-            mesh.clay_distances,
-            mesh.part_weights,
-        ],
-        axis=1,
-    ).astype(np.float32)
+def figure_node(mesh: ClayMesh | Packed, name: str) -> NodePath:
+    """A Panda3D node for a built mesh, with its clay colours. The packed arrays (see
+    `figure.pack`) are copied straight into Panda3D's vertex buffer, which is far faster
+    than writing vertices one by one from Python."""
+    packed = mesh if isinstance(mesh, Packed) else pack(mesh)
     data = GeomVertexData(name, _vertex_format(), Geom.UH_static)
-    data.uncleanSetNumRows(len(rows))
-    memoryview(data.modifyArray(0)).cast("B")[:] = rows.tobytes()
+    data.uncleanSetNumRows(len(packed.rows))
+    memoryview(data.modifyArray(0)).cast("B")[:] = memoryview(packed.rows).cast("B")
     triangles = GeomTriangles(Geom.UH_static)
     triangles.setIndexType(Geom.NT_uint32)
     indices = triangles.modifyVertices()
-    indices.uncleanSetNumRows(mesh.triangles.size)
-    memoryview(indices).cast("B")[:] = mesh.triangles.astype(np.uint32).tobytes()
+    indices.uncleanSetNumRows(packed.triangles.size)
+    memoryview(indices).cast("B")[:] = memoryview(packed.triangles).cast("B")
     geom = Geom(data)
     geom.addPrimitive(triangles)
     node = GeomNode(name)
     node.addGeom(geom)
     path = NodePath(node)
     palette = PTA_LVecBase3f.emptyArray(MAX_CLAYS)
-    for i, colour in enumerate(mesh.palette):
+    for i, colour in enumerate(packed.palette):
         palette[i] = tuple(float(c) for c in colour)
     path.setShaderInput("palette", palette)
     return path

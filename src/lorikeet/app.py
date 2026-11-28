@@ -2,8 +2,8 @@
 
 - game: what's played. `nest` (the default), or `none` for an empty desk.
 - input: where scenes come from. `desk` for now; `camera` arrives with detection.
-- renderer: how the game window draws the game's `View` (ADR 0008): `flat` (the default)
-  or `sketch` (pencil on paper); more later.
+- renderer: how the game window draws the game's `View` (ADR 0008): `flat` (the default),
+  `sketch` (pencil on paper) or `clay` (a stop-motion clay set, in Panda3D).
 - output: where the game window goes. `window` on this screen, or `projector`.
 
 The game window is the projection: it shows only what would be projected, whatever the
@@ -48,9 +48,18 @@ from lorikeet.view import View
 
 FPS = 60
 
+
+def _clay(output: str, size: tuple[int, int], display: int) -> Renderer:
+    # Imported only when picked: Panda3D is big, and the other renderers don't need it.
+    from lorikeet.render.clay.renderer import ClayRenderer
+
+    return ClayRenderer(output, size, display)
+
+
 RENDERERS: dict[str, Callable[[str, tuple[int, int], int], Renderer]] = {
     "flat": FlatRenderer,
     "sketch": SketchRenderer,
+    "clay": _clay,
 }
 """Each renderer by name: given the output, the window's canvas size and the projector's
 display index, it opens its window."""
@@ -190,7 +199,8 @@ def run(
     events, give the game the newest scene, then for each window, let its overlays draw onto a
     bare wall and a cleared layer, and have its renderer draw the game's view landing on the
     wall, with the layer on top. Every window shows the same view. Stops on Esc in any window
-    or when any window closes, or after `max_frames` (tests).
+    or when any window closes (whichever kind of window it is), or after `max_frames`
+    (tests).
     """
     walls = [pygame.Surface(screen.renderer.size) for screen in screens]
     layers = [pygame.Surface(screen.renderer.size, pygame.SRCALPHA) for screen in screens]
@@ -201,7 +211,12 @@ def run(
         if any(_quits(event) for event in pending):
             return
         for screen in screens:
-            for event in screen.renderer.events(pending):
+            events = screen.renderer.events(pending)
+            # Again, for renderers whose windows aren't pygame's: their input isn't in
+            # `pending`, only in what they hand back.
+            if any(_quits(event) for event in events):
+                return
+            for event in events:
                 for overlay in screen.overlays:
                     overlay.handle(event)
         dt = clock.tick(FPS) / 1000  # also waits, so the loop runs at most FPS times a second

@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from lorikeet.render.clay.cache import built
+from lorikeet.render.clay.cache import built, detail
 from lorikeet.render.clay.figure import Figure, Piece
 from lorikeet.render.clay.shapes import Ellipsoid
 
@@ -28,3 +28,11 @@ def test_a_different_recipe_or_step_is_built_afresh(tmp_path):
     built(ball(4), 0.5, tmp_path)
 
     assert len(list(tmp_path.glob("*.npz"))) == 3
+
+
+def test_the_fingerprint_texture_is_made_once_then_read_back(tmp_path):
+    first = detail(size=32, folder=tmp_path)
+    again = detail(size=32, folder=tmp_path)
+
+    assert len(list(tmp_path.glob("detail-*.npz"))) == 1
+    assert np.array_equal(first.rgba(), again.rgba())
