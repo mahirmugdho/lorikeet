@@ -89,11 +89,16 @@ class SketchLooks:
         pygame.draw.circle(canvas, PENCIL, speckle, 0.12 * r)
 
     def _nest(self, canvas: pygame.Surface, thing: Thing, rng: random.Random) -> None:
+        """A bowl's front wall, as in the flat look: from the rim's front edge down to the
+        ground, with the hollow left open so Lori shows down inside it."""
         (x, y), r = thing.position, _radius(thing)
-        centre = (x, y + 0.55 * r)
-        _ellipse_wash(canvas, WASHES["nest"], centre, 1.3 * r, 0.58 * r)
-        _loop(canvas, centre, 1.3 * r, 0.58 * r, rng)
-        _loop(canvas, (x, y + 0.4 * r), 0.95 * r, 0.3 * r, rng)  # the hollow
+        centre, across = (x, y + 0.35 * r), 1.3 * r
+        bottom = _half_ellipse(centre, across, 0.65 * r)
+        rim = _half_ellipse(centre, across, 0.24 * r)
+        pygame.draw.polygon(canvas, WASHES["nest"], bottom + rim[::-1])
+        _arc(canvas, centre, across, 0.65 * r, rng)
+        _arc(canvas, centre, across, 0.24 * r, rng)  # the rim's front edge
+        _arc(canvas, centre, 0.92 * across, 0.45 * r, rng, width=1)  # a coil of the weave
 
     def _bird(self, canvas: pygame.Surface, thing: Thing, rng: random.Random) -> None:
         """Lori, facing right: hops when an egg wins, squats while laying."""
@@ -198,6 +203,34 @@ def _loop(canvas: pygame.Surface, centre: Point, rx: float, ry: float, rng: rand
         wobble = rng.uniform(-2.0, 2.0)
         points.append((cx + (rx + wobble) * math.cos(angle), cy + (ry + wobble) * math.sin(angle)))
     pygame.draw.lines(canvas, PENCIL, False, points, 2)
+
+
+def _half_ellipse(centre: Point, rx: float, ry: float, steps: int = 24) -> list[Point]:
+    """The bottom half of an ellipse, from its right end round to its left end."""
+    cx, cy = centre
+    return [
+        (cx + rx * math.cos(math.pi * i / steps), cy + ry * math.sin(math.pi * i / steps))
+        for i in range(steps + 1)
+    ]
+
+
+def _arc(
+    canvas: pygame.Surface,
+    centre: Point,
+    rx: float,
+    ry: float,
+    rng: random.Random,
+    width: int = 2,
+) -> None:
+    """The bottom half of a quick pencil ellipse, a bit lumpy, running a little past each
+    end (like `_loop`)."""
+    cx, cy = centre
+    points = []
+    for i in range(13):
+        angle = -0.1 + i * (math.pi + 0.2) / 12
+        wobble = rng.uniform(-1.5, 1.5)
+        points.append((cx + (rx + wobble) * math.cos(angle), cy + (ry + wobble) * math.sin(angle)))
+    pygame.draw.lines(canvas, PENCIL, False, points, width)
 
 
 def _hatch(canvas: pygame.Surface, polygon: Sequence[Point], rng: random.Random) -> None:
