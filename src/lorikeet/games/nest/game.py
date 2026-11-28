@@ -119,7 +119,8 @@ class NestGame:
         self.outcomes: list[Outcome] = []
         """How each egg so far has ended, oldest first."""
         self._world = World(self.level)
-        self._ground: tuple[Piece, ...] = ()  # the notes that are ground right now
+        self._placed: tuple[Piece, ...] = ()  # the notes stuck down right now
+        self._ground: tuple[Piece, ...] = ()  # those of them that are ground (not the go note)
         self._go_on = False
         self._until_egg = LAY_DELAY
         self._closest = math.inf  # the egg's closest distance to the blossom so far
@@ -147,10 +148,10 @@ class NestGame:
             # The wall is clear after a win: on to the next level (or this one again).
             self._index = (self._index + 1) % len(self._levels)
             self._start()
-        placed = [piece for piece in scene.pieces if piece.state in _PLACED]
-        go_notes = {piece.id for piece in placed if _on(self.level.go, piece.center)}
+        self._placed = tuple(piece for piece in scene.pieces if piece.state in _PLACED)
+        go_notes = {piece.id for piece in self._placed if _on(self.level.go, piece.center)}
         self._go_on = bool(go_notes)
-        self._ground = tuple(piece for piece in placed if piece.id not in go_notes)
+        self._ground = tuple(piece for piece in self._placed if piece.id not in go_notes)
         self._world.set_notes(
             (piece, NOTE_KINDS.get(piece.color, NoteKind.SOLID)) for piece in self._ground
         )
@@ -163,9 +164,10 @@ class NestGame:
     def view(self) -> View:
         """What to show: the ground, the go spot, the notes, the blossom, Lori sitting in her
         nest (the nest a layer in front of her), and the egg in front of them all, so it's
-        seen coming up out of the nest. The notes are listed for renderers that want them (a 3D one
-        can cast their shadows); a flat renderer draws nothing for them, because they're
-        real paper on the wall, or the desk's sketched paper."""
+        seen coming up out of the nest. Every stuck-down note is listed, the go note too, so
+        renderers can answer it: the flat and sketch looks outline it, and a 3D one can cast
+        its shadow. None of them draws the paper itself, which is real paper on the wall (or
+        the desk's sketched paper)."""
         level, state = self.level, self.state
         things = [
             Thing(_TERRAIN + i, "terrain", *_centred(polygon))
@@ -176,7 +178,7 @@ class NestGame:
                 _GO, "go", Circle(level.go.radius), level.go.at, pose="on" if self._go_on else "off"
             )
         )
-        for piece in self._ground:
+        for piece in self._placed:
             shape, centre = _centred(piece.outline)
             things.append(
                 Thing(_NOTES + piece.id, "note", shape, centre, layer=1, pose=piece.state.value)

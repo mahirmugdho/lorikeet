@@ -9,7 +9,8 @@ It asks each system for the display's own pixels, so the desktop doesn't stretch
 calibration measures wherever the canvas lands, but a stretched picture is softer and costs
 more pixels to draw.
 
-What each kind of thing looks like is in `flat_looks`.
+What each kind of thing looks like comes from a set of looks: `flat_looks` by default. The
+sketch renderer is this same window with pencil looks (`sketch`).
 """
 
 from __future__ import annotations
@@ -17,21 +18,32 @@ from __future__ import annotations
 import os
 import sys
 from collections.abc import Mapping, Sequence
+from typing import Protocol
 
 import pygame
 
+from lorikeet.render.flat_looks import BACKDROP as BACKDROP  # where it's defined
 from lorikeet.render.flat_looks import FlatLooks
-from lorikeet.view import View
+from lorikeet.view import Thing, View
 
-BACKDROP = (232, 230, 226)
-"""A light, nearly grey backdrop: shadows show on it, and it adds almost no colour to real
-notes under the projector, because detection keys on saturation (ADR 0006)."""
+
+class Looks(Protocol):
+    """What each kind of thing looks like, for a pygame window: a background colour, and a
+    way to draw one thing."""
+
+    @property
+    def backdrop(self) -> tuple[int, int, int]: ...
+
+    def draw(self, canvas: pygame.Surface, thing: Thing) -> None: ...
 
 
 class FlatRenderer:
-    def __init__(self, output: str, size: tuple[int, int], display: int) -> None:
+    def __init__(
+        self, output: str, size: tuple[int, int], display: int, looks: Looks | None = None
+    ) -> None:
         """Open the window: `output` is "window" (a `size` canvas in a window on this
-        screen) or "projector" (fullscreen on display number `display`)."""
+        screen) or "projector" (fullscreen on display number `display`). `looks` draws
+        each thing (flat looks unless given)."""
         # By default SDL minimises a fullscreen window when it loses focus, so clicking on
         # the laptop screen would make the projector go blank.
         os.environ.setdefault("SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS", "0")
@@ -46,18 +58,25 @@ class FlatRenderer:
             del os.environ["SDL_VIDEODRIVER"]  # this SDL can't use Wayland: use its default
             pygame.display.init()
         pygame.display.set_caption("Lorikeet")
-        self._canvas = _open_projector(display) if output == "projector" else _open_window(size)
-        self._looks = FlatLooks()
+        # Events from this window name its Window object: the one made to go fullscreen on
+        # the projector, or None in a plain window, which has no Window object.
+        self._window: pygame.Window | None = None
+        if output == "projector":
+            self._canvas, self._window = _open_projector(display)
+        else:
+            self._canvas = _open_window(size)
+        self._looks: Looks = looks if looks is not None else FlatLooks()
 
     @property
     def size(self) -> tuple[int, int]:
         return self._canvas.get_size()
 
-    def events(self) -> list[pygame.event.Event]:
-        return pygame.event.get()
+    def events(self, pending: Sequence[pygame.event.Event]) -> list[pygame.event.Event]:
+        """This window's input, and input that belongs to no window (quitting)."""
+        return [e for e in pending if getattr(e, "window", None) in (None, self._window)]
 
     def draw(self, view: View, wall: pygame.Surface, layer: pygame.Surface) -> None:
-        self._canvas.fill(BACKDROP)
+        self._canvas.fill(self._looks.backdrop)
         for thing in view.back_to_front():
             self._looks.draw(self._canvas, thing)
         # The picture lands on what's on the wall (see Renderer): white leaves it as it is.
@@ -112,7 +131,7 @@ def _open_window(size: tuple[int, int]) -> pygame.Surface:
     return pygame.display.set_mode(size, pygame.SCALED | pygame.RESIZABLE)
 
 
-def _open_projector(display: int) -> pygame.Surface:
+def _open_projector(display: int) -> tuple[pygame.Surface, pygame.Window]:
     sizes = pygame.display.get_desktop_sizes()
     if display >= len(sizes):
         raise SystemExit(
@@ -126,8 +145,9 @@ def _open_projector(display: int) -> pygame.Surface:
     pygame.display.set_mode(sizes[display], display=display)
     # Fullscreen at the desktop's own resolution, so one canvas pixel is one projector pixel.
     # The other kind (desktop=False) changes the video mode, which can rescale the picture.
-    pygame.Window.from_display_module().set_fullscreen(desktop=True)
+    window = pygame.Window.from_display_module()
+    window.set_fullscreen(desktop=True)
     canvas = pygame.display.get_surface()  # fetched again, as going fullscreen can replace it
     if canvas is None:
         raise SystemExit("lorikeet: the projector window closed as it went fullscreen")
-    return canvas
+    return canvas, window

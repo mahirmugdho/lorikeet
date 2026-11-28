@@ -9,7 +9,8 @@ The colours are muted on purpose. The camera finds notes by how vivid their colo
 Two kinds keep the light off real paper, for the same reason (anything bright or coloured
 under a note shifts its colour for the camera):
 
-- `note` draws nothing: it's real paper on the wall, or the desk's own sketched paper.
+- `note` gets a hand-drawn pencil outline just outside its edge, boiling like the desk's
+  sketch, and its paper is left alone. Dark lines add no light or colour.
 - `go` is only a ring, and its middle stays empty for the note stuck on it.
 
 Light comes from the top left, so shadows fall down and to the right.
@@ -18,12 +19,18 @@ Light comes from the top left, so shadows fall down and to the right.
 from __future__ import annotations
 
 import math
+import time
 from collections.abc import Callable, Sequence
 
 import pygame
 
 from lorikeet.interface import Point
+from lorikeet.render.pencil import around, boil_frame, pencil_outline, seeded
 from lorikeet.view import Circle, Outline, Text, Thing
+
+BACKDROP = (232, 230, 226)
+"""A light, nearly grey backdrop: shadows show on it, and it adds almost no colour to real
+notes under the projector, because detection keys on saturation (ADR 0006)."""
 
 DEFAULT_FILL = (150, 146, 140)
 DEFAULT_EDGE = (105, 101, 96)
@@ -66,8 +73,11 @@ Look = Callable[[pygame.Surface, Thing], None]
 
 
 class FlatLooks:
-    def __init__(self) -> None:
+    backdrop = BACKDROP
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
         pygame.font.init()
+        self._clock = clock  # drives the boil of the outlines round notes
         self._font = pygame.font.Font(None, 30)  # None picks the font pygame ships with
         self._shadows: dict[tuple[object, ...], pygame.Surface] = {}
         self._fonts: dict[int, pygame.font.Font] = {}
@@ -78,7 +88,7 @@ class FlatLooks:
             "bird": self._bird,
             "blossom": self._blossom,
             "go": self._go,
-            "note": _nothing,
+            "note": self._note,
         }
 
     def draw(self, canvas: pygame.Surface, thing: Thing) -> None:
@@ -167,6 +177,13 @@ class FlatLooks:
             petal = (x + 0.55 * r * math.cos(angle), y + 0.55 * r * math.sin(angle))
             pygame.draw.circle(canvas, PETAL, petal, 0.48 * r)
         pygame.draw.circle(canvas, BLOSSOM_CENTRE, (x, y), 0.38 * r)
+
+    def _note(self, canvas: pygame.Surface, thing: Thing) -> None:
+        """A pencil outline round the note, so players see it's counted. Only stuck-down notes
+        are in the View, so a note still in a hand isn't outlined."""
+        if isinstance(thing.shape, Outline):
+            rng = seeded(thing.id, boil_frame(self._clock()))
+            pencil_outline(canvas, around(thing.shape.placed(thing.position, thing.angle)), rng)
 
     def _go(self, canvas: pygame.Surface, thing: Thing) -> None:
         """A ring, thicker once a note is on it, with "go" written under it."""
@@ -277,10 +294,6 @@ def _default(canvas: pygame.Surface, thing: Thing) -> None:
         points = thing.shape.placed(thing.position, thing.angle)
         pygame.draw.polygon(canvas, DEFAULT_FILL, points)
         pygame.draw.polygon(canvas, DEFAULT_EDGE, points, 2)
-
-
-def _nothing(canvas: pygame.Surface, thing: Thing) -> None:
-    pass
 
 
 def _radius(thing: Thing) -> float:

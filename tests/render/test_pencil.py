@@ -1,10 +1,11 @@
-"""The pencil style's wobble: an outline traced by hand, close to the real one but never exact."""
+"""The pencil style, shared by the desk and the sketch renderer: its wobble is an outline
+traced by hand, close to the real one but never exact."""
 
 import math
 import random
 
-from lorikeet.desk.sketch import boil_frame, jittered
 from lorikeet.interface import Point, Polygon, square
+from lorikeet.render.pencil import boil_frame, jittered
 
 NOTE = square((100, 100), 100)
 

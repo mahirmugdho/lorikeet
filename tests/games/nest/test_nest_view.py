@@ -106,6 +106,15 @@ def test_stuck_down_notes_are_shown_as_notes_and_notes_in_a_hand_are_not():
     assert len(of_kind(view, "note")) == 1
 
 
+def test_the_note_on_the_go_spot_is_shown_too():
+    # It isn't ground, but it's stuck down, so it's outlined like the rest.
+    view = shown(GO_NOTE, note(1, (500, 200)))
+
+    assert sorted(thing.position for thing in of_kind(view, "note")) == sorted(
+        [LEVEL.go.at, (500, 200)]
+    )
+
+
 def test_the_egg_is_drawn_in_front_of_everything_else():
     view = shown(GO_NOTE, seconds=LAY_DELAY + 0.1)
 
