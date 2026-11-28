@@ -12,9 +12,10 @@ Each frame the launcher calls `update(scene, dt)` with the newest scene (ADR 000
   note isn't ground, so it can't change the level it's starting.
 - **Eggs.** One at a time: `LAY_DELAY` after the go note goes on, or after the last egg
   ends, Lori lays the next. An egg ends when it touches the blossom (the level is won, and
-  no more eggs come), falls off the canvas, or stalls: it gets no closer to the blossom for
-  the level's `timeout_s`. Taking the go note off stops new eggs; an egg already out
-  finishes.
+  no more eggs come), breaks on the floor along the bottom of the wall (it lies there
+  cracked for `BREAK_SECONDS` before it goes), falls off either side, or stalls: it gets no
+  closer to the blossom for the level's `timeout_s`. Taking the go note off stops new
+  eggs; an egg already out finishes.
 - **After a win.** A message says so, and asks for the notes to come off. Once the wall is
   clear (no notes at all), the next level starts, or the same one again if it's the only
   one. Everything is done with notes, because there's no keyboard at the wall.
@@ -43,6 +44,10 @@ window) the game skips ahead instead of running hundreds of steps at once."""
 
 LAY_DELAY = 0.75
 """Seconds before Lori lays the next egg."""
+
+BREAK_SECONDS = 1.0
+"""How long a broken egg lies where it broke, cracked, before it's cleared away and the
+countdown to the next egg starts."""
 
 PROGRESS = 4.0
 """Pixels an egg has to get closer to the blossom to count as progress."""
@@ -83,12 +88,15 @@ class State(Enum):
     """The go note is on; the next egg is coming."""
     FLYING = "flying"
     """An egg is out."""
+    BROKEN = "broken"
+    """An egg just broke: it lies where it broke, cracked, for a moment."""
     WON = "won"
     """An egg reached the blossom."""
 
 
 class Outcome(Enum):
     WON = "won"
+    BROKEN = "broken"
     FELL = "fell"
     STALLED = "stalled"
 
@@ -117,11 +125,15 @@ class NestGame:
         self._until_egg = LAY_DELAY
         self._closest = math.inf  # the egg's closest distance to the blossom so far
         self._since_progress = 0.0
+        self._broken: tuple[int, Point, float] | None = None  # a broken egg: id, where, angle
+        self._until_cleared = 0.0  # seconds before the broken egg is cleared away
 
     @property
     def state(self) -> State:
         if self.outcomes and self.outcomes[-1] is Outcome.WON:
             return State.WON
+        if self._broken is not None:
+            return State.BROKEN
         if self._world.egg is not None:
             return State.FLYING
         return State.LAYING if self._go_on else State.WAITING
@@ -200,6 +212,11 @@ class NestGame:
                     layer=3,
                 )
             )
+        elif self._broken is not None:
+            egg_id, where, angle = self._broken
+            things.append(
+                Thing(egg_id, "egg", Circle(EGG_RADIUS), where, angle=angle, layer=3, pose="broken")
+            )
         things.extend(self._words(state))
         return View(things=tuple(things))
 
@@ -222,6 +239,12 @@ class NestGame:
     def _step(self) -> None:
         if self.state is State.WON:
             return
+        if self._broken is not None:
+            self._until_cleared -= STEP
+            if self._until_cleared <= 0:
+                self._broken = None
+                self._until_egg = LAY_DELAY
+            return
         egg = self._world.egg
         if egg is None:
             self._wait_for_egg()
@@ -229,6 +252,16 @@ class NestGame:
         self._world.step(STEP)
         outcome = self._outcome()
         if outcome is not None:
+            if outcome is Outcome.BROKEN:
+                # It stays where it broke for a moment, as the same thing in the View.
+                where = self._world.egg
+                assert where is not None
+                # A fast egg is a little way into the floor by the step it touches it: show
+                # it resting on top, since nothing can lie below the floor.
+                x, y = where
+                on_floor = (x, min(y, self.level.size[1] - EGG_RADIUS))
+                self._broken = (_EGGS + len(self.outcomes), on_floor, self._world.egg_angle)
+                self._until_cleared = BREAK_SECONDS
             self.outcomes.append(outcome)
             self._world.remove_egg()
             self._until_egg = LAY_DELAY
@@ -252,7 +285,10 @@ class NestGame:
         distance = math.dist(egg, blossom.at)
         if distance <= blossom.radius + EGG_RADIUS:
             return Outcome.WON
-        # Off the bottom or either side. Above the top is fine: a bounce can arc up there.
+        if self._world.egg_broken:
+            return Outcome.BROKEN
+        # Off either side (or, if it ever got past the floor, the bottom). Above the top is
+        # fine: a bounce can arc up there.
         if y - EGG_RADIUS > height or x + EGG_RADIUS < 0 or x - EGG_RADIUS > width:
             return Outcome.FELL
         if distance < self._closest - PROGRESS:

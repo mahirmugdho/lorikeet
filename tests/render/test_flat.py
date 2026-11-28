@@ -235,3 +235,17 @@ def test_the_game_window_takes_its_own_input_and_leaves_the_desks(renderer: Flat
     desks = pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=(10, 10), button=1, window="desk")
 
     assert renderer.events([mine, desks]) == [mine]
+
+
+def test_a_broken_egg_is_open_at_the_top_with_its_top_half_lying_beside_it(
+    renderer: FlatRenderer,
+):
+    whole = Thing(id=1000, kind="egg", shape=Circle(28), position=(160, 120))
+    broken = Thing(id=1000, kind="egg", shape=Circle(28), position=(160, 120), pose="broken")
+
+    intact, cracked = (shown(renderer, View(things=(t,))).copy() for t in (whole, broken))
+
+    assert pixel(intact, 160, 100) != BACKDROP  # the whole egg's shell is there...
+    assert pixel(cracked, 160, 100) == BACKDROP  # ...the broken one's top half isn't
+    assert pixel(cracked, 160, 135) != BACKDROP  # its bottom half is
+    assert pixel(cracked, 197, 130) != BACKDROP  # and its top half lies beside it

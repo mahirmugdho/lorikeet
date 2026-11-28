@@ -39,6 +39,9 @@ DEFAULT_EDGE = (105, 101, 96)
 TERRAIN = (163, 150, 134)
 EGG, EGG_SPECKLE, EGG_SHINE = (247, 240, 226), (206, 190, 166), (255, 253, 248)
 EGG_RIM = (150, 140, 124)
+EGG_WHITE, YOLK = (250, 247, 238), (222, 198, 150)
+"""A broken egg's puddle. The yolk is muted, well short of a yellow note's colour, so the
+camera never takes it for one."""
 """Projected onto paper, a nearly white egg is just slightly brighter paper, so a darker rim
 keeps its outline visible (on the desk's notes and on real ones)."""
 NEST, NEST_WEAVE, NEST_EDGE = (150, 122, 92), (134, 108, 80), (112, 88, 64)
@@ -113,6 +116,9 @@ class FlatLooks:
         _rounded_polygon(canvas, TERRAIN, points, ROUNDING)
 
     def _egg(self, canvas: pygame.Surface, thing: Thing) -> None:
+        if thing.pose == "broken":
+            _broken_egg(canvas, thing)
+            return
         (x, y), r = thing.position, _radius(thing)
         self._circle_shadow(canvas, (x, y), r)
         pygame.draw.circle(canvas, EGG, (x, y), r)
@@ -231,6 +237,51 @@ class FlatLooks:
             )
         dx, dy = SHADOW_OFFSET
         canvas.blit(self._shadows[key], (topleft[0] - pad + dx, topleft[1] - pad + dy))
+
+
+def _broken_egg(canvas: pygame.Surface, thing: Thing) -> None:
+    """An egg that broke where it lies: its bottom half, cracked open along a zigzag, in a
+    small puddle of egg, with its top half tipped over beside it."""
+    (x, _), r = thing.position, _radius(thing)
+    bottom, cap, floor = broken_shell(thing.position, r)
+    _ellipse(canvas, EGG_WHITE, (x + 0.25 * r, floor - 0.12 * r), (2.7 * r, 0.24 * r))
+    _ellipse(canvas, YOLK, (x + 0.8 * r, floor - 0.14 * r), (0.6 * r, 0.2 * r))
+    for half in (bottom, cap):
+        pygame.draw.polygon(canvas, EGG, half)
+        pygame.draw.polygon(canvas, EGG_RIM, half, 3)
+
+
+def broken_shell(centre: Point, r: float) -> tuple[list[Point], list[Point], float]:
+    """A broken egg's two halves, for an egg of radius `r` that broke at `centre`: the bottom
+    half where the egg was, cracked open along a zigzag, and the top half, a little smaller,
+    tipped over on its side to the right on the same ground. Also how far down the ground is.
+    Shared by the looks that draw a broken egg flat (this one and the sketch)."""
+    x, y = centre
+    floor = y + r  # it broke lying on whatever's under it: the floor, for now
+    bottom = [(x + px, y + py) for px, py in _half_shell(r, upper=False)]
+    turn = math.radians(100)
+    cap = [
+        (
+            0.8 * (px * math.cos(turn) - py * math.sin(turn)),
+            0.8 * (px * math.sin(turn) + py * math.cos(turn)),
+        )
+        for px, py in _half_shell(r, upper=True)
+    ]
+    lowest = max(py for _, py in cap)
+    cap = [(x + 1.25 * r + px, floor - lowest + py) for px, py in cap]
+    return bottom, cap, floor
+
+
+def _half_shell(r: float, upper: bool) -> list[Point]:
+    """Half of an egg of radius `r` round the origin, cut along a zigzag across its middle:
+    the crack, from left to right, then round the curved side back to the left."""
+    crack = [(-r + i * r / 3, 0.05 * r + (0.14 * r if i % 2 else -0.12 * r)) for i in range(7)]
+    side = 1 if not upper else -1  # screen y grows downwards: the lower half is +y
+    curve = [
+        (r * math.cos(math.pi * i / 16), side * r * math.sin(math.pi * i / 16))
+        for i in range(1, 16)
+    ]
+    return crack + curve
 
 
 def _default(canvas: pygame.Surface, thing: Thing) -> None:
