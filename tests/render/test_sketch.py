@@ -108,3 +108,15 @@ def test_the_renderer_draws_on_paper(monkeypatch: pytest.MonkeyPatch):
 def _fonts() -> Iterator[None]:
     pygame.font.init()
     yield
+
+
+def test_a_broken_egg_is_sketched_open_at_the_top_with_its_top_half_beside_it():
+    whole = sketched(Thing(id=1000, kind="egg", shape=Circle(28), position=(160, 120)))
+    broken = sketched(
+        Thing(id=1000, kind="egg", shape=Circle(28), position=(160, 120), pose="broken")
+    )
+
+    assert pixel(whole, 160, 100) != PAPER  # the whole egg's shell is there...
+    assert pixel(broken, 160, 100) == PAPER  # ...the broken one's top half isn't
+    assert darkest(broken, pygame.Rect(130, 110, 60, 40)) < 120  # its pencilled bottom half
+    assert darkest(broken, pygame.Rect(180, 110, 40, 40)) < 120  # and its top half beside it

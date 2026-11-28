@@ -5,6 +5,10 @@ screen. Ground never moves: the level's terrain and the solid notes are static s
 the egg is the only thing that moves. A note's shapes come from its piece's convex `parts`,
 because the physics engine only takes convex shapes (ADR 0004).
 
+Along the bottom of the wall is the floor. An egg that touches it breaks (`egg_broken`).
+The floor is the first thing that breaks eggs; anything else that should (obstacles, when
+levels get them) is made the same way, with `breaking`.
+
 Notes come in two sorts (`NoteKind`):
 
 - **Solid** notes are ground the egg collides with: plain, or bouncy.
@@ -47,6 +51,9 @@ BOOST_ACCELERATION = 3000.0
 zone: crossing a 100 px note adds roughly 600 px/s."""
 BOOST_TOP_SPEED = 1400.0
 
+_EGG, _BREAKS = 1, 2
+"""pymunk collision types: the egg, and things that break it when it touches them."""
+
 SLOW_DRAG = 14.0
 """How hard a slow zone drags, per second. Against gravity, an egg falls through one at
 about GRAVITY / SLOW_DRAG = 107 px/s, a crawl."""
@@ -74,6 +81,12 @@ class World:
         self._space.gravity = (0.0, GRAVITY)
         for polygon in level.terrain:
             self._space.add(_ground(self._space.static_body, polygon))
+        width, height = level.size
+        floor = pymunk.Segment(self._space.static_body, (0.0, height), (width, height), 2.0)
+        floor.elasticity, floor.friction = GROUND_BOUNCE, GROUND_GRIP
+        self._space.add(breaking(floor))
+        self._space.on_collision(_EGG, _BREAKS, begin=self._on_break)
+        self._broken = False
         self._notes: dict[int, list[pymunk.Poly]] = {}  # solid notes, in the physics engine
         self._zones: dict[int, tuple[NoteKind, list[pymunk.Poly]]] = {}  # zones, kept out
         self._egg: tuple[pymunk.Body, pymunk.Circle] | None = None
@@ -118,13 +131,24 @@ class World:
         body.velocity = velocity
         shape = pymunk.Circle(body, EGG_RADIUS)
         shape.elasticity, shape.friction = EGG_BOUNCE, EGG_GRIP
+        shape.collision_type = _EGG
         self._space.add(body, shape)
         self._egg = (body, shape)
+        self._broken = False
 
     def remove_egg(self) -> None:
         if self._egg is not None:
             self._space.remove(*self._egg)
             self._egg = None
+        self._broken = False
+
+    @property
+    def egg_broken(self) -> bool:
+        """Whether the egg has touched something that breaks it, such as the floor."""
+        return self._broken
+
+    def _on_break(self, arbiter: pymunk.Arbiter, space: pymunk.Space, data: object) -> None:
+        self._broken = True
 
     @property
     def egg(self) -> Point | None:
@@ -157,6 +181,12 @@ class World:
             # A fixed fraction of its speed lost each step, so a fast egg slows hard and
             # quickly settles at a crawl, as gravity and drag balance.
             egg.velocity = velocity * math.exp(-SLOW_DRAG * seconds)
+
+
+def breaking(shape: pymunk.Shape) -> pymunk.Shape:
+    """Make `shape` break the egg when the egg touches it (the floor; obstacles later)."""
+    shape.collision_type = _BREAKS
+    return shape
 
 
 def _ground(

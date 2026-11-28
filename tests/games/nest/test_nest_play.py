@@ -1,6 +1,6 @@
 """How Nest plays: notes are ground, a note on the go spot lays eggs one at a time, and each
-egg wins, falls or stalls. Small made-up levels keep each rule's test independent of how the
-real levels are tuned."""
+egg wins, breaks on the floor, falls off a side, or stalls. Small made-up levels keep each
+rule's test independent of how the real levels are tuned."""
 
 import copy
 import math
@@ -8,11 +8,11 @@ from typing import Any
 
 import pytest
 
-from lorikeet.games.nest.game import LAY_DELAY, NestGame, Outcome, State
+from lorikeet.games.nest.game import BREAK_SECONDS, LAY_DELAY, NestGame, Outcome, State
 from lorikeet.games.nest.level import Level, level_ids, load_level, parse_level
 from lorikeet.interface import Piece, PieceState, Point, Scene
 
-# A canvas with the nest high on the left, and nothing under it: eggs fall off the bottom.
+# A canvas with the nest high on the left, and nothing under it: eggs drop to the floor.
 PIT: dict[str, Any] = {
     "format": 1,
     "name": "Pit",
@@ -88,8 +88,45 @@ def test_a_note_still_in_a_hand_does_not_start_the_eggs():
     assert game.egg is None
 
 
-def test_an_egg_that_falls_off_the_canvas_is_lost():
+def test_an_egg_that_drops_onto_the_floor_breaks():
     level = made_up()
+    game = NestGame(level)
+
+    run_until_outcome(game, Scene(time=0.0, pieces=(go_note(level),)))
+
+    assert game.outcomes == [Outcome.BROKEN]
+
+
+def eggs(game: NestGame) -> list:
+    return [thing for thing in game.view().things if thing.kind == "egg"]
+
+
+def test_a_broken_egg_lies_cracked_on_the_floor_for_a_moment_then_the_next_egg_comes():
+    level = made_up()
+    game = NestGame(level)
+    scene = Scene(time=0.0, pieces=(go_note(level),))
+    run(game, scene, seconds=LAY_DELAY + 0.1)
+    (flying,) = eggs(game)
+
+    run_until_outcome(game, scene)
+    (broken,) = eggs(game)
+    assert broken.id == flying.id  # the same egg, now broken
+    assert broken.pose == "broken"
+    assert broken.position[1] == pytest.approx(600 - broken.shape.radius, abs=2)  # on the floor
+    assert game.state is State.BROKEN
+    assert game.egg is None  # nothing's in play while it lies there
+
+    run(game, scene, seconds=BREAK_SECONDS - 0.1)
+    assert eggs(game) == [broken]  # it stays where it broke
+    run(game, scene, seconds=0.2)
+    assert eggs(game) == []  # then it's gone...
+    run(game, scene, seconds=LAY_DELAY)
+    (next_egg,) = eggs(game)  # ...and Lori lays the next one
+    assert next_egg.id != broken.id and next_egg.pose != "broken"
+
+
+def test_an_egg_that_goes_off_a_side_is_lost():
+    level = made_up(nest={"at": [200, 100], "launch": [-700, -100]})  # thrown off the left
     game = NestGame(level)
 
     run_until_outcome(game, Scene(time=0.0, pieces=(go_note(level),)))
@@ -104,7 +141,7 @@ def test_eggs_keep_coming_one_at_a_time_while_the_go_note_stays():
     run(game, Scene(time=0.0, pieces=(go_note(level),)), seconds=8)
 
     assert len(game.outcomes) >= 3
-    assert set(game.outcomes) == {Outcome.FELL}
+    assert set(game.outcomes) == {Outcome.BROKEN}
 
 
 def test_taking_the_go_note_off_stops_new_eggs():
@@ -153,7 +190,7 @@ def test_a_note_still_in_a_hand_is_not_ground():
 
     run_until_outcome(game, Scene(time=0.0, pieces=(go_note(level), held)))
 
-    assert game.outcomes == [Outcome.FELL]
+    assert game.outcomes == [Outcome.BROKEN]  # straight through to the floor
 
 
 def test_the_note_on_the_go_spot_is_not_ground():
@@ -162,7 +199,7 @@ def test_the_note_on_the_go_spot_is_not_ground():
 
     run_until_outcome(game, Scene(time=0.0, pieces=(go_note(level),)))
 
-    assert game.outcomes == [Outcome.FELL]
+    assert game.outcomes == [Outcome.BROKEN]  # straight through to the floor
 
 
 def test_the_same_notes_always_play_out_the_same_way():
@@ -258,7 +295,7 @@ def test_clearing_the_wall_before_a_win_changes_nothing():
 
     game.update(Scene(time=0.0), 1 / 60)
 
-    assert game.outcomes == [Outcome.FELL]
+    assert game.outcomes == [Outcome.BROKEN]
 
 
 def drop_note_on_the_falling_egg(game: NestGame, go: Piece) -> Piece:
