@@ -19,7 +19,7 @@
 - [ ] Tests added/updated for new behavior
 - [ ] Bug fix? A regression test reproduces the bug and now passes
 - [ ] Docs updated if behavior, setup, or commands changed (`README`, `CLAUDE.md`, `docs/`)
-- [ ] New architectural decision? ADR added in `docs/adr/`
+- [ ] New architectural decision? ADR added in `docs/adr/` as `Accepted` (approving this PR accepts it)
 - [ ] Roadmap box ticked only if the work is demonstrated
 
 ### Security & privacy (camera code, fixtures, anything projected)

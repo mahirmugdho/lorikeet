@@ -1,6 +1,6 @@
 # 0008. Games describe a View; the renderer a player picks draws it
 
-- **Status:** Proposed
+- **Status:** Accepted, 2026-11-27. Ryan approved #9.
 - **Date:** 2026-11-26
 - **Deciders:** Ryan, Mahir
 

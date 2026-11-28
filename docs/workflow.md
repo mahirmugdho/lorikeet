@@ -41,7 +41,8 @@
 - Check the non-negotiables in `CLAUDE.md` first, then correctness, then style.
 - Pull the branch and run it on hardware when it touches capture, calibration, detection, or a game.
 - "Request changes" means blocking. Use a plain comment for nits.
-- Accepting an ADR: the reviewer comments "accept", the author flips its status to `Accepted` on the same PR, and the reviewer approves that final commit. The ruleset requires approval of the **last push** by someone other than the pusher, so a commit added after approval (by either of us, or by `@claude`) never merges unreviewed, unless Mahir uses the admin bypass.
+- Accepting an ADR: approve the PR that adds it. The ADR is already written as `Accepted`, so there's nothing to flip and no follow-up PR. If you don't agree with the decision, request changes.
+- The ruleset requires approval of the **last push** by someone other than the pusher, so a commit added after approval (by either of us, or by `@claude`) never merges unreviewed, unless Mahir uses the admin bypass.
 
 ## Lanes
 
