@@ -18,7 +18,7 @@ Lorikeet turns a projector, a webcam, and sticky notes into physical play surfac
 | `make test` | Tests only (`uv run pytest -q`; add `-k name` for one) |
 | `make lint` | ruff + pyright |
 | `make fmt` | Format and apply safe lint fixes |
-| `uv run lorikeet` | Play Nest at the desk. Two windows open: the game window (the projection, drawn flat; `--renderer sketch` for pencil) and the desk window, where you drag notes with the mouse. `--output projector` puts the game window on the projector, `--level` picks a level, `--game none` gives an empty desk. `--help` lists the options |
+| `uv run lorikeet` | Play Nest at the desk. Two windows open: the game window (the projection, drawn flat; `--renderer sketch` for pencil, `--renderer clay` for the stop-motion clay set) and the desk window, where you drag notes with the mouse. `--output projector` puts the game window on the projector, `--level` picks a level, `--game none` gives an empty desk. `--help` lists the options |
 | `uv run --env-file .env lorikeet` | The same, with your `.env` settings (colours, note size, projector display) |
 | `uv run lorikeet calibrate` | Recalibrate camera → projector _(after Phase 1)_ |
 
@@ -33,7 +33,7 @@ src/lorikeet/
   tracking.py        stable piece ids, states            (Phase 2)
   interface.py       Piece, Scene, SceneSource, changes  (Phase 1, the contract)
   view.py            View: what a game shows each frame (ADR 0008, the other contract)
-  render/            renderers (flat, sketch): each draws a View its own way, owns the window
+  render/            renderers (flat, sketch, clay/): each draws a View its own way, owns the window
   app.py             launcher: input + renderer + output -> a game; only it knows them
   desk/              desk input: drag notes in the desk window, no camera or projector
   debug.py           debug overlay (press D): what games are told about each piece
@@ -94,7 +94,7 @@ docs/                product/, adr/, security/, legal/, ROADMAP, setup, workflow
 - **macOS camera permission** goes to the app that launches Python (Terminal, VS Code). Without it, `VideoCapture` opens but returns black or empty frames.
 - **Camera index 0 may be the built-in camera or an iPhone** (Continuity Camera). External webcams land at 1+. Set `LORIKEET_CAMERA_INDEX`.
 - **The projector must be an extended display, not mirrored**, or calibration is off by the resolution ratio.
-- **Display scaling stretches X11 windows.** On a Wayland desktop with any screen scaled, XWayland can draw a 1920x1080 projector's window at 2880x1620 and shrink it. The flat renderer draws through SDL's Wayland driver in Wayland sessions to avoid that (`SDL_VIDEODRIVER=x11` forces the old way), and declares DPI awareness on Windows. Alignment doesn't depend on it, since calibration measures wherever the canvas lands, but sharpness and speed do. Panda3D is X11-only on Linux, so a 3D renderer meets this again.
+- **Display scaling stretches X11 windows.** On a Wayland desktop with any screen scaled, XWayland can draw a 1920x1080 projector's window at 2880x1620 and shrink it. The flat renderer draws through SDL's Wayland driver in Wayland sessions to avoid that (`SDL_VIDEODRIVER=x11` forces the old way), and declares DPI awareness on Windows. Alignment doesn't depend on it, since calibration measures wherever the canvas lands, but sharpness and speed do. Panda3D is X11-only on Linux, so the clay renderer draws the set offscreen at the canvas's size and stretches it to the window, and puts pygame on X11 too: an SDL Wayland window can't get a surface once Panda3D's window is open (ADR 0009).
 - **The projection lights up the notes.** Whatever the game draws under a note shifts its colour. Keep the area under detected notes dark/neutral, and threshold mostly on saturation (ADR 0006).
 - **Webcam auto-exposure and white balance drift** as the projected image changes. Lock them where the camera allows (`CAP_PROP_AUTO_EXPOSURE`); otherwise expect thresholds to wander.
 - **Hands cover notes.** A settled piece that goes missing is `HIDDEN`, not removed, until it's been gone for `LORIKEET_HIDDEN_SECONDS` (2 s). Time settings are in seconds, not frames, because webcams drop frames in dim rooms.
