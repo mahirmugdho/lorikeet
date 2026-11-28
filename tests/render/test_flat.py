@@ -215,3 +215,17 @@ def test_the_egg_has_a_darker_rim_so_it_shows_up_on_paper(renderer: FlatRenderer
     screen = shown(renderer, View(things=(egg,)))
 
     assert sum(pixel(screen, 179, 90)) < sum(pixel(screen, 160, 90)) - 60
+
+
+def test_a_broken_egg_is_open_at_the_top_with_its_top_half_lying_beside_it(
+    renderer: FlatRenderer,
+):
+    whole = Thing(id=1000, kind="egg", shape=Circle(28), position=(160, 120))
+    broken = Thing(id=1000, kind="egg", shape=Circle(28), position=(160, 120), pose="broken")
+
+    intact, cracked = (shown(renderer, View(things=(t,))).copy() for t in (whole, broken))
+
+    assert pixel(intact, 160, 100) != BACKDROP  # the whole egg's shell is there...
+    assert pixel(cracked, 160, 100) == BACKDROP  # ...the broken one's top half isn't
+    assert pixel(cracked, 160, 135) != BACKDROP  # its bottom half is
+    assert pixel(cracked, 197, 130) != BACKDROP  # and its top half lies beside it
