@@ -5,6 +5,7 @@ import pytest
 
 from lorikeet.render.clay.mesher import mesh_field
 from lorikeet.render.clay.shapes import (
+    Coil,
     Ellipsoid,
     RoundCone,
     Scaled,
@@ -151,3 +152,12 @@ def test_a_slab_keeps_its_outline_and_rounds_its_edges_inside_it():
     assert d[2] == pytest.approx(0, abs=1e-4)  # the front face
     assert d[3] == pytest.approx(4 * (2**0.5 - 1), abs=1e-3)  # the front top edge is rounded
     assert d[4] > 0  # and so are the ends
+
+
+def test_a_coil_is_a_round_rope_bent_round_an_oval_deeper_in_front_than_behind():
+    coil = Coil(centre=(0, 0, 0), across=20, front=12, back=6, tube=2)
+
+    d = coil.distance(points((22, 0, 0), (0, -14, 0), (0, 8, 0), (20, 0, 2), (-18, 0, 0)))
+
+    assert d == pytest.approx([0, 0, 0, 0, 0], abs=1e-4)  # side, front, back, top, inside
+    assert coil.distance(points((0, 0, 0)))[0] > 3  # the middle is empty

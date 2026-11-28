@@ -195,6 +195,42 @@ class Torus:
 
 
 @dataclass(frozen=True)
+class Coil:
+    """A rope of clay, round in section, bent round an oval lying flat around the shape's
+    own z axis: one coil of a coil pot. The oval reaches `across` to each side, `front`
+    towards the camera (-y) and `back` away from it, so a coil can be deeper in front than
+    behind (see `kinds.nest`).
+
+    Unlike a squashed `Torus`, the rope stays round all the way round: squashing a ring
+    squashes its rope too, and a flattened rope shades like a pancake."""
+
+    centre: Vec3
+    across: float
+    front: float
+    back: float
+    tube: float
+    turn: np.ndarray = field(default_factory=lambda: IDENTITY)
+
+    def distance(self, p: np.ndarray) -> np.ndarray:
+        q = (p - np.asarray(self.centre, dtype=np.float32)) @ self.turn
+        x, y = q[:, 0], q[:, 1]
+        # The front and back halves are two half ovals meeting side to side, where both
+        # run straight front to back, so the join is smooth.
+        depth = np.where(y < 0, self.front, self.back)
+        # How far each point is from the oval, in its plane: the same approximation as
+        # `Ellipsoid` uses, in two dimensions. Exact on the oval, close near it.
+        k0 = np.hypot(x / self.across, y / depth)
+        k1 = np.hypot(x / self.across**2, y / depth**2)
+        around = np.where(k1 > 1e-9, k0 * (k0 - 1) / np.maximum(k1, 1e-9), -depth)
+        return (np.hypot(around, q[:, 2]) - self.tube).astype(np.float32)
+
+    def bounds(self) -> tuple[np.ndarray, np.ndarray]:
+        c = np.asarray(self.centre)
+        reach = max(self.across, self.front, self.back) + self.tube
+        return c - reach, c + reach
+
+
+@dataclass(frozen=True)
 class Scaled:
     """Another shape stretched or squashed along x, y and z about the origin.
 

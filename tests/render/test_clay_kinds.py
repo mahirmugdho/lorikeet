@@ -21,10 +21,17 @@ def test_a_ledge_keeps_its_outline_and_reaches_back_to_the_backdrop():
     assert mesh.positions[:, 1].max() == pytest.approx(28, abs=2)
 
 
-def test_the_nest_sits_on_the_bottom_of_its_circle():
-    mesh = build(nest(40), step=1.5)
-    assert mesh.positions[:, 2].min() == pytest.approx(-40, abs=3)
-    assert extent(mesh)[1] < 60  # squashed front to back, so it fits on a shelf
+def test_the_nest_is_a_bowl_on_the_bottom_of_its_circle_deeper_in_front_than_behind():
+    """Lori sits in it: its front wall stands well in front of its middle, where she is,
+    and its back is shallow, so it fits in front of the backdrop."""
+    bowl = nest(40)
+    _, y, z = build(bowl, step=1.5).positions.T
+
+    assert z.min() == pytest.approx(-40, abs=3)  # on the ground
+    assert -y.min() > 1.5 * y.max()
+    assert -y.min() > 30
+    where_she_sits = np.array([(0, -10, -10), (0, -20, 0), (15, -15, -15), (-15, -5, -20)])
+    assert (bowl.distance(where_she_sits.astype(np.float32)) > 0).all()  # no clay there
 
 
 def test_the_egg_is_about_as_big_as_its_circle():

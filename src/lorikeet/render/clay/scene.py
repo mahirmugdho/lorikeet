@@ -35,12 +35,18 @@ from lorikeet.render.clay.motion import Animator, bird_parts, frame_of, jitter
 from lorikeet.render.clay.stage import BACKDROP_DEPTH, Stage, figure_node, pose, shadow_box
 from lorikeet.view import Circle, Outline, Thing, View
 
-LAYER_DEPTH = 8.0
-"""How much further forward each layer stands, in pixels."""
+LAYER_DEPTH = 6.0
+"""How much further forward each layer stands, in pixels. Small, so everything stays close
+to the ledges it rests on: Lori sits in her nest one layer behind its middle (inside the
+bowl, see `kinds.nest`), and the egg comes out one layer in front of it."""
 
 LORI_TURN = (-32.0, 12.0)
 """Lori's pose for the camera: turned 32 degrees to face us a little and tipped 12 towards
 us, as if seen from slightly above. Her figure faces +x, the way the game has her look."""
+
+TIPPED = {"bird": LORI_TURN[1], "nest": LORI_TURN[1]}
+"""Figures tipped towards the camera, as if seen from slightly above, in degrees. The nest
+tips with Lori, so she sits in it, and its rim shows a sliver of the far side."""
 
 
 @dataclass(frozen=True)
@@ -71,7 +77,7 @@ def _outline(thing: Thing) -> tuple[tuple[float, float], ...]:
 
 
 LOOKS = {
-    "bird": Look(lambda t: lori(_radius(t)), step=0.8, boil=0.6, jitter=1.0),
+    "bird": Look(lambda t: lori(_radius(t)), step=1.0, boil=0.6, jitter=1.0),
     "egg": Look(lambda t: egg(_radius(t)), step=0.8, boil=0.3, jitter=0.6),
     "nest": Look(lambda t: nest(_radius(t)), step=1.0, boil=0.35, jitter=0.4),
     "blossom": Look(lambda t: blossom(_radius(t)), step=0.8, boil=0.4, jitter=0.8),
@@ -141,9 +147,9 @@ class ClayScene:
             self._figures[key] = figure_node(mesh, thing.kind)
         place = self.stage.root.attachNewNode(f"{thing.kind} {thing.id}")
         holder = place
-        if thing.kind == "bird":
+        if thing.kind in TIPPED:
             holder = place.attachNewNode("tilt")
-            holder.setP(LORI_TURN[1])
+            holder.setP(TIPPED[thing.kind])
         figure = self._figures[key].copyTo(holder)
         figure.setShaderInput("detail_strength", look.detail)
         if thing.kind == "bird":

@@ -11,11 +11,14 @@ buffer, and `figure_node` turns a built `ClayMesh` into something it can draw.
   be fitted around the playfield: the shadow map only covers what that lens sees, and an
   unfitted lens is the usual reason Panda3D shadows don't appear at all. It's fitted
   tightly, so the map's 4096 texels cover the 1920 px playfield at about two texels per
-  pixel and shadow edges stay smooth.
+  pixel and shadow edges stay smooth. Shadows are cast from nearer the camera than the
+  light shades from, so they stay short (see `Light.shadow_tilt`).
 - **Fill.** Not Panda lights: the shader does them (a soft light from all round plus a
   gentle one from the front right), since they don't cast shadows.
-- **Backdrop.** A plane at the back that catches the shadows: a muted warm grey, lighter
-  at the top, kept nearly colourless because its light lands on every real note.
+- **Backdrop.** A plane at the back that catches the shadows: a warm, sandy grey, lighter
+  at the top, kept low in colour because its light lands on every real note.
+- **Warmth.** The light is a warm white, like a tungsten-balanced softbox, and the fill
+  warmer still, so shadows come out a warm brown rather than grey.
 - **Anti-aliasing.** 8x multisampling, so silhouettes are smooth curves, not stairs.
 """
 
@@ -65,15 +68,23 @@ CAMERA_DISTANCE = 1000.0
 """How far in front of the play layer the camera sits. With an orthographic lens this
 changes nothing on screen; it only has to be in front of everything."""
 
-BACKDROP_DEPTH = 28.0
-"""How far behind the play layer the backdrop is, in pixels. Further back means shadows
-land further from what casts them, and softer."""
+BACKDROP_DEPTH = 44.0
+"""How far behind the play layer the backdrop is, in pixels: room for the deepest figure
+(Lori, sitting in her nest) to stand clear of it. Shadow length is set by the light
+(`Light.shadow_tilt`), so the room costs nothing there."""
 
-BACKDROP_TOP, BACKDROP_BOTTOM = (150, 148, 145), (116, 114, 111)
-"""A muted, barely warm grey, lighter at the top like a lit studio sweep. The near-white
-light is a touch warm too, so on screen it comes out at about 8% saturation (OpenCV S about
-20): too little for the camera to take any of it for a note (ADR 0006), even though its hue
-is close to yellow's."""
+BACKDROP_TOP, BACKDROP_BOTTOM = (182, 178, 168), (148, 144, 135)
+"""A warm, sandy grey, lighter at the top like a lit studio sweep. Under the warm light it
+comes out at about 13% saturation (OpenCV S about 33, a colour difference of about 22 of
+255): warm like the desk's paper, but still far too little colour for the camera to take
+any of it for a note (they're above S 90, ADR 0006), even though its hue is close to
+yellow's."""
+
+KEY_COLOUR = (1.0, 0.95, 0.88)
+"""The key light: a warm white."""
+SKY_COLOUR, GROUND_COLOUR = (1.0, 0.94, 0.86), (1.0, 0.82, 0.64)
+"""The all-round fill, from above and from below (bounced off a warm floor). It's all that
+lights the shadows, so it sets their colour: warmer than the key, so shadows are warm."""
 
 SHADOW_MAP = 4096
 """Shadow map texels per side."""
@@ -93,9 +104,17 @@ class Light:
     """Where the key light comes from, on the wall: 0 is straight above, negative is to
     the left, clockwise like the game's angles. -40 is up and to the left, as in the flat
     looks, so shadows fall down and to the right."""
-    tilt: float = 62.0
-    """How far round from the camera the key light is: 0 would be right behind the camera
-    (flat, no shadows to see), 90 would be skimming along the wall."""
+    tilt: float = 50.0
+    """How far round from the camera the key light is, for shading: 0 would be right behind
+    the camera (flat), 90 would be skimming along the wall. Far enough round that every
+    form shades from a lit side to a shadowed one."""
+    shadow_tilt: float = 22.0
+    """How far round from the camera shadows are cast from: much less than `tilt`, so
+    shadows fall short, close under what casts them, instead of stretching across the
+    backdrop. A real set can't split its light like this; it's the one place this one
+    cheats. It never shows, because the shading light is the one further round: on the
+    side of a figure the camera sees, wherever the figure shades itself from the shadow
+    light, the shading has already turned dark."""
     key: float = 1.0
     """Key brightness."""
     fill: float = 0.15
@@ -106,9 +125,17 @@ class Light:
     """The gentle front-right fill's brightness."""
 
     def toward_key(self) -> np.ndarray:
-        """Unit vector, world space, from the set towards the key light."""
-        a, t = math.radians(self.angle), math.radians(self.tilt)
-        return np.array([math.sin(t) * math.sin(a), -math.cos(t), math.sin(t) * math.cos(a)])
+        """Unit vector, world space, from the set towards the key light, for shading."""
+        return _toward(self.angle, self.tilt)
+
+    def toward_shadows(self) -> np.ndarray:
+        """Unit vector, world space, from the set towards where shadows are cast from."""
+        return _toward(self.angle, self.shadow_tilt)
+
+
+def _toward(angle: float, tilt: float) -> np.ndarray:
+    a, t = math.radians(angle), math.radians(tilt)
+    return np.array([math.sin(t) * math.sin(a), -math.cos(t), math.sin(t) * math.cos(a)])
 
 
 def canvas_camera(size: tuple[int, int]) -> tuple[OrthographicLens, Point3]:
@@ -146,7 +173,7 @@ class Stage:
         base.cam.lookAt(place + Vec3(0, 1, 0))
 
         self.key = DirectionalLight("key")
-        self.key.setColor((light.key, light.key * 0.98, light.key * 0.95, 1))  # near white
+        self.key.setColor((*(np.array(KEY_COLOUR) * light.key), 1))
         self.key.setShadowCaster(True, SHADOW_MAP, SHADOW_MAP)
         self.key.setCameraMask(SHADOWS)
         self.key_np = self.root.attachNewNode(self.key)
@@ -178,10 +205,9 @@ class Stage:
         self.root.setShaderInput("key_toward", Vec3(*toward))
         front = np.array([0.55, -1.0, 0.15])
         self.root.setShaderInput("fill_toward", Vec3(*(front / np.linalg.norm(front))))
-        warm = np.array([1.0, 0.96, 0.9])
-        self.root.setShaderInput("fill_colour", Vec3(*(warm * light.front_fill)))
-        self.root.setShaderInput("sky_colour", Vec3(*(np.array([1.0, 0.98, 0.95]) * light.fill)))
-        ground = np.array([1.0, 0.86, 0.72]) * light.fill * 0.45  # bounced off a warm floor
+        self.root.setShaderInput("fill_colour", Vec3(*(np.array(KEY_COLOUR) * light.front_fill)))
+        self.root.setShaderInput("sky_colour", Vec3(*(np.array(SKY_COLOUR) * light.fill)))
+        ground = np.array(GROUND_COLOUR) * light.fill * 0.45  # dimmer: less light from below
         self.root.setShaderInput("ground_colour", Vec3(*ground))
         self.root.setShaderInput("boil_amount", 0.0)
         self.root.setShaderInput("boil_seed", 0.0)
@@ -210,9 +236,10 @@ class Stage:
         node.setShaderInput("shadow_bias", 0.4 / (far - near))  # 0.4 px of depth
 
     def _fit_key(self) -> None:
-        """Point the key light at the playfield and fit its lens tightly round it."""
+        """Point the key light's shadow camera at the playfield, from where shadows are cast
+        from, and fit its lens tightly round it."""
         width, height = self.size
-        toward = self.light.toward_key()
+        toward = self.light.toward_shadows()
         centre = np.array(to_world((width / 2, height / 2), BACKDROP_DEPTH / 2))
         self.key_np.setPos(Point3(*(centre + toward * 2000)))
         self.key_np.lookAt(Point3(*centre))
@@ -274,9 +301,10 @@ class Stage:
         node.setShaderInput("detail_strength", 0.0)
         node.setShaderInput("sheen_strength", 0.0)
         # The softbox is far bigger than a figure, so on the backdrop, well behind it, the
-        # figure only ever blocks part of the light: there's no fully dark core.
-        node.setShaderInput("shadow_strength", 0.75)
-        self.set_softness(node, pixels=5.0)
+        # figure only ever blocks part of the light: there's no fully dark core, just a
+        # gentle, soft-edged dimming.
+        node.setShaderInput("shadow_strength", 0.5)
+        self.set_softness(node, pixels=7.0)
         return node
 
     def wall_layer(self) -> NodePath:

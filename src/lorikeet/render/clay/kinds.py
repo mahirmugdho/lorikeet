@@ -18,20 +18,24 @@ import math
 import numpy as np
 
 from lorikeet.render.clay.figure import Figure, Piece
-from lorikeet.render.clay.shapes import Ellipsoid, Scaled, Slab, Torus, disc, rotation
+from lorikeet.render.clay.shapes import Coil, Ellipsoid, Slab, Torus, disc, rotation
 
-LEDGE = (150, 140, 126)
-"""A muted, sandy stone clay: about 16% saturated, a long way under a note's."""
+LEDGE = (164, 150, 130)
+"""A warm, sandy clay, kept muted: about 28% saturated on screen, a long way under a
+note's."""
+
+LEDGE_FRONT = -40.0
+"""How far in front of the play layer a ledge's front face is, in pixels: far enough that
+everything resting on a ledge (Lori's nest, the egg) stands on its top, not over its edge."""
 
 
 def ledge(outline: tuple[tuple[float, float], ...], back: float) -> Figure:
     """A slab of rolled-out clay cut to `outline` (projector pixels around the ledge's
-    centre), from 30 px in front of the play layer back to `back`, where it meets the
-    backdrop, like a shelf. Its top edge is exactly where the physics has it; the edges
+    centre), from `LEDGE_FRONT` back to `back`, where it meets the backdrop, like a shelf. Its top edge is exactly where the physics has it; the edges
     are rounded inside the outline and the whole slab is gently uneven."""
     xz = tuple((x, -y) for x, y in outline)  # projector y is down; world z is up
     return Figure(
-        (Piece(Slab(xz, front=-30.0, back=back, round=7.0), "ledge"),),
+        (Piece(Slab(xz, front=LEDGE_FRONT, back=back, round=7.0), "ledge"),),
         {"ledge": LEDGE},
         lump_height=1.0,
         lump_size=26.0,
@@ -42,20 +46,46 @@ def ledge(outline: tuple[tuple[float, float], ...], back: float) -> Figure:
     )
 
 
+NEST_FRONT, NEST_BACK = 0.6, 0.3
+"""How far the nest's bowl reaches towards the camera and away from it, as a share of how
+far it reaches to each side."""
+
+
 def nest(radius: float) -> Figure:
-    """A coil pot: a rope of brown clay coiled into a bowl, wider at the top, sitting on
-    the ground at the bottom of the nest's circle. Each coil is a ring, squashed front to
-    back so the nest isn't deeper than the shelf it sits on, pressed lightly onto the one
-    below, so the creases between coils stay."""
+    """A coil pot for Lori to sit in: a rope of brown clay coiled into a bowl, wider at the
+    top, sitting on the ground at the bottom of the nest's circle. Each coil is pressed
+    lightly onto the one below, so the creases between coils stay.
+
+    It's built like a stage set, for the camera. The camera looks straight at it, so only
+    the bowl's front wall ever shows: the back of the rim hides behind the front of it, and
+    Lori fills the middle. So the bowl is deep in front, to stand well clear of her, and
+    shallow behind, where it only has to fit in front of the backdrop."""
     r = radius
-    tube = 0.17 * r
-    coils = ((0.78, -0.86), (1.0, -0.62), (1.17, -0.36), (1.28, -0.1))
-    pieces = [Piece(Ellipsoid((0, 0, -0.84 * r), (0.8 * r, 0.4 * r, 0.16 * r)), "nest")]
+    tube = 0.16 * r
+    coils = ((0.8, -0.84), (1.04, -0.6), (1.24, -0.34), (1.4, -0.08))
+    floor_front, floor_back = NEST_FRONT * 0.8 * r, NEST_BACK * 0.8 * r
+    pieces = [
+        Piece(
+            Ellipsoid(
+                (0, (floor_back - floor_front) / 2, -0.84 * r),
+                (0.8 * r, (floor_front + floor_back) / 2, tube),
+            ),
+            "nest",
+        )
+    ]
     for i, (across, height) in enumerate(coils):
-        # Each coil is a touch off-centre and tipped, as if coiled by hand.
+        # Each coil is a touch off-centre, tipped and thicker or thinner, as if by hand.
         wobble = rotation(pitch=2.0 * math.sin(i * 2.1), roll=3.0 * math.cos(i * 1.7))
-        ring = Torus((0.02 * r * math.sin(i * 1.3), 0, height * r), across * r, tube, wobble)
-        pieces.append(Piece(Scaled(ring, (1.0, 0.5, 1.0)), "nest", blend=0.06 * r))
+        a = across * r
+        coil = Coil(
+            (0.02 * r * math.sin(i * 1.3), 0, height * r),
+            across=a,
+            front=NEST_FRONT * a,
+            back=NEST_BACK * a,
+            tube=tube * (1 + 0.08 * math.sin(i * 2.7)),
+            turn=wobble,
+        )
+        pieces.append(Piece(coil, "nest", blend=0.06 * r))
     return Figure(
         tuple(pieces),
         {"nest": (124, 90, 62)},
